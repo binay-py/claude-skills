@@ -10,15 +10,17 @@
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "Nine tested skills: Claude Code safety (secret audit, shell-command checkpoints, token audit), shipping websites and web games, browser control, recap videos.",
-      "version": "0.5.0",
+      "description": "11 tested skills: Claude Code safety (secret audit, shell-command undo, token audit, CLAUDE.md doctor), shipping websites and web games, freelance proposals, browser control, recap videos.",
+      "version": "0.6.0",
       "skills": [
         "./skills/bash-checkpoint",
         "./skills/brave-cdp",
         "./skills/cf-pages-deploy",
+        "./skills/claude-md-doctor",
         "./skills/claude-safety-audit",
         "./skills/claude-token-audit",
         "./skills/event-recap-video",
+        "./skills/freelance-proposal",
         "./skills/itch-html5-package",
         "./skills/link-preview-check",
         "./skills/site-qa"
