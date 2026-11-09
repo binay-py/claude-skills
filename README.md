@@ -2,7 +2,7 @@
 
 **Claude Code skills that keep Claude Code safe and cheap, and help you ship websites, web games and videos.** Each one is a single zero-dependency script plus a SKILL.md, tested against real projects (not toy demos) before it landed here.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 11](https://img.shields.io/badge/skills-11-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 12](https://img.shields.io/badge/skills-12-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
 
 ![brave-cdp running a whole browser job on one connection](docs/demo.gif)
 
@@ -11,6 +11,7 @@
 |---|---|
 | **[claude-safety-audit](skills/claude-safety-audit)** | Finds the **API keys and tokens "Yes, and don't ask again" saved into your permission rules**, `settings.local.json` / `.mcp.json` committed to git (or still in history), `Bash(*)` / `git push:*` / bypass mode, and missing deny rules. `--fix --apply` repairs them with backups. Never prints a full secret. |
 | **[bash-checkpoint](skills/bash-checkpoint)** | An **undo button for shell commands**. A PreToolUse hook that snapshots your files before `rm`, `mv`, `git clean`, `sed -i`…, **blocks** `rm -rf ~`, `rm -rf /` and `Remove-Item -Recurse C:\`, and makes you confirm force-pushes and `git reset --hard`, even in bypass mode. `restore <id>` brings files back, including uncommitted and untracked ones. |
+| **[claude-sandbox](skills/claude-sandbox)** | Runs Claude Code in **Docker with only your project folder mounted**: non-root, all capabilities dropped, no sudo, your `~/.claude` and SSH keys never visible. Makes `--dangerously-skip-permissions` reasonable for long unattended runs. `--check` proves the isolation. |
 | **[claude-token-audit](skills/claude-token-audit)** | **Where do your limits go?** Reads your local session logs: tokens by project, session, model and day, peak context per session, which tools flood the context, the biggest single outputs, and what loads into every session (CLAUDE.md, MCP servers, skills), with specific fixes. 200 MB of logs in ~4 s. |
 | **[claude-md-doctor](skills/claude-md-doctor)** | Shows **what loads into every session** and its token cost, and catches broken or too-deep `@imports` (the limit is 4 hops), CLAUDE.md over 200 lines, a MEMORY.md past the 200-line/25 KB load limit, references to files and `npm run` scripts that no longer exist, secrets, and an AGENTS.md that's silently ignored. |
 

@@ -10,14 +10,15 @@
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "11 tested skills: Claude Code safety (secret audit, shell-command undo, token audit, CLAUDE.md doctor), shipping websites and web games, freelance proposals, browser control, recap videos.",
-      "version": "0.6.0",
+      "description": "12 tested skills: Claude Code safety (sandbox, secret audit, shell-command undo, token audit, CLAUDE.md doctor), shipping websites and web games, freelance proposals, browser control, recap videos.",
+      "version": "0.7.0",
       "skills": [
         "./skills/bash-checkpoint",
         "./skills/brave-cdp",
         "./skills/cf-pages-deploy",
         "./skills/claude-md-doctor",
         "./skills/claude-safety-audit",
+        "./skills/claude-sandbox",
         "./skills/claude-token-audit",
         "./skills/event-recap-video",
         "./skills/freelance-proposal",
