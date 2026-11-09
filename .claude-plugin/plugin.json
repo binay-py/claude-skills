@@ -1,0 +1,8 @@
+{
+  "name": "binay-skills",
+  "version": "0.1.0",
+  "description": "brave-cdp and event-recap-video skills for Claude Code.",
+  "author": { "name": "Binay Bhandari" },
+  "license": "MIT",
+  "keywords": ["claude-code", "skills", "cdp", "browser-automation", "ffmpeg", "video"]
+}

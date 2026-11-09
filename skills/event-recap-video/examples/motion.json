@@ -1,0 +1,21 @@
+{
+ "music": "music/long-steady-track.mp3",
+ "bpm": 120,
+ "music_start": 0.0,
+ "music_volume": 0.8,
+ "duck_volume": 0.22,
+ "ambient_volume": 0.3,
+ "sfx_volume": 0.5,
+ "fade_out": 5,
+ "workers": 3,
+ "clips": [
+  {"id": "0120", "at": 0.5, "beats": 2, "shake": 10},
+  {"id": "0088", "at": 0.5, "beats": 2, "punch": true},
+  {"id": "0042", "start": 1, "beats": 8, "title": ["SUMMER RETREAT", "JUNE 12 – 15"], "shake": 6},
+  {"id": "0011", "at": 0.5, "beats": 4, "day": "DAY 1 🚐"},
+  {"id": "0019", "at": 0.4, "beats": 4, "speed": 2},
+  {"id": "0057", "start": 4, "beats": 12, "speech": true, "cap": "the speech everyone quoted 🔥", "pos": "bottom", "cap_at": 1.0},
+  {"id": "0233", "at": 0.5, "beats": 8, "freeze": 2, "cap": "not crying, you're crying 😭"},
+  {"id": "0310", "at": 0.5, "beats": 16, "speed": 0.5, "zoom": 0.05, "verse": ["\"A closing quote goes here.\"", "Summer Retreat 2026"]}
+ ]
+}

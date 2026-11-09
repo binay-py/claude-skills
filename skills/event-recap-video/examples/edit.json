@@ -1,0 +1,30 @@
+{
+ "title": "SUMMER RETREAT 2026",
+ "subtitle": "Lake Town · June 12 – 15",
+ "closing": "See you next year",
+ "closing_sub": "#summerretreat",
+ "title_bg": "0042", "title_bg_at": 0.5,
+ "closing_bg": "0310",
+ "music": ["music/track-a.mp3", "music/track-b.mp3"],
+ "music_volume": 0.35,
+ "duck_volume": 0.08,
+ "ambient_volume": 0.25,
+ "photo_seconds": 3.0,
+ "hook_xf": 0.1,
+ "horizontal_hook": [
+  {"id": "0120", "at": 0.5, "dur": 1.4},
+  {"id": "0088", "at": 0.3, "dur": 1.2},
+  {"id": "0205", "start": 12.0, "dur": 1.6}
+ ],
+ "horizontal": [
+  {"id": "0011", "at": 0.5, "dur": 3.5, "label": "Day 1 · Jun 12"},
+  {"id": "0019", "at": 0.4, "dur": 3.0},
+  {"id": "0057", "start": 31.0, "dur": 10.0, "speech": true},
+  {"id": "0140", "at": 0.5, "dur": 3.5, "label": "Day 2 · Jun 13", "xf": 0.8}
+ ],
+ "vertical_hook": [],
+ "vertical": [
+  {"id": "0011", "at": 0.5, "dur": 3.0},
+  {"id": "0057", "start": 31.0, "dur": 8.0, "speech": true}
+ ]
+}

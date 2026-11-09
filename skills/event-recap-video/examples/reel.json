@@ -1,0 +1,15 @@
+{
+ "music": "music/upbeat-track.mp3",
+ "bpm": 128,
+ "music_start": null,
+ "music_volume": 0.9,
+ "duck_volume": 0.35,
+ "clips": [
+  {"id": "0057", "start": 28.0, "beats": 6, "speech": true, "text": "POV: 4 days you won't forget"},
+  {"id": "0120", "at": 0.5, "beats": 4, "flash": true, "text": "the first night"},
+  {"id": "0088", "at": 0.5, "beats": 4},
+  {"id": "0205", "start": 3.0, "beats": 4},
+  {"id": "0233", "at": 0.6, "beats": 8, "flash": true, "text": "sunrise on the lake"},
+  {"id": "0310", "at": 0.5, "beats": 8, "zoom": 0.04, "text": "SUMMER RETREAT · 2026"}
+ ]
+}

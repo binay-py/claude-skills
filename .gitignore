@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+*.png
+!docs/*.png
+*.mp4
+!docs/*.mp4
