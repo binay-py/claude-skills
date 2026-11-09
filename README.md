@@ -2,6 +2,7 @@
 
 A collection of 23 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, repos, games and media.
 
+[![tests](https://github.com/binay-py/claude-skills/actions/workflows/test.yml/badge.svg)](https://github.com/binay-py/claude-skills/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node 22+](https://img.shields.io/badge/node-22%2B-339933.svg)](https://nodejs.org)
 [![GitHub stars](https://img.shields.io/github/stars/binay-py/claude-skills?style=social)](https://github.com/binay-py/claude-skills/stargazers)
@@ -159,7 +160,7 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 
 ## Contributing
 
-Bug reports and pull requests are welcome, especially from macOS and Linux users, since most testing so far was on Windows. Please include the command you ran and its output.
+Bug reports and pull requests are welcome. Every push is tested on Windows, macOS and Linux. See [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules and how to run the tests.
 
 ## License
 

@@ -1,0 +1,80 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check (every Node script)
+        run: |
+          set -e
+          n=0
+          while IFS= read -r f; do node --check "$f"; n=$((n+1)); done < <(find skills -name '*.mjs' -not -path '*/node_modules/*')
+          echo "checked $n scripts"
+
+      - name: Syntax check (every Python script)
+        run: |
+          python -m pip install --quiet pillow
+          python -m compileall -q skills
+
+      - name: Plugin manifest lists every skill
+        run: |
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('.claude-plugin/marketplace.json', 'utf8'));
+            const listed = new Set(m.plugins[0].skills.map(s => s.replace('./skills/', '')));
+            const onDisk = fs.readdirSync('skills').filter(d => fs.existsSync('skills/' + d + '/SKILL.md'));
+            const missing = onDisk.filter(d => !listed.has(d)), extra = [...listed].filter(d => !onDisk.includes(d));
+            if (missing.length || extra.length) { console.error('missing:', missing, 'extra:', extra); process.exit(1); }
+            console.log(onDisk.length + ' skills listed');
+          "
+
+      - name: bash-checkpoint rules
+        run: node skills/bash-checkpoint/tests/run.mjs
+
+      - name: package-guard (offline cases)
+        run: node skills/package-guard/tests/run.mjs
+
+      - name: secret-commit-guard
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ci"
+          node skills/secret-commit-guard/tests/run.mjs
+
+      - name: README links and anchors
+        run: node skills/readme-upgrade/scripts/readme-check.mjs . --offline
+
+      - name: Smoke tests
+        run: |
+          set -e
+          node skills/read-guard/scripts/read-guard.mjs test README.md
+          node skills/claude-md-doctor/scripts/md-doctor.mjs . > /dev/null
+          node skills/env-doctor/scripts/env-doctor.mjs skills/site-qa > /dev/null || true
+          node skills/release-notes/scripts/release-notes.mjs > /dev/null
+          printf 'Hi there\nI will make your website.\n' | node skills/freelance-proposal/scripts/proposal-lint.mjs - --platform fiverr || test $? -eq 1
+          echo "smoke tests ok"

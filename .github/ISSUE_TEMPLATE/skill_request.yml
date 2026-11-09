@@ -1,0 +1,21 @@
+name: Skill idea
+description: Suggest a new skill or an improvement to an existing one
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What goes wrong or takes too long today when you use Claude Code? A real example helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What the skill would do
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you do now instead
