@@ -1,10 +1,17 @@
 # claude-skills
 
-**Claude Code skills for shipping things: websites, web games and videos.** Each one is a single zero-dependency script plus a SKILL.md, tested against real projects (not toy demos) before it landed here.
+**Claude Code skills that keep Claude Code safe and cheap, and help you ship websites, web games and videos.** Each one is a single zero-dependency script plus a SKILL.md, tested against real projects (not toy demos) before it landed here.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 6](https://img.shields.io/badge/skills-6-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 9](https://img.shields.io/badge/skills-9-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
 
 ![brave-cdp running a whole browser job on one connection](docs/demo.gif)
+
+### Keep Claude Code safe and cheap
+| Skill | What it does |
+|---|---|
+| **[claude-safety-audit](skills/claude-safety-audit)** | Finds the **API keys and tokens "Yes, and don't ask again" saved into your permission rules**, `settings.local.json` / `.mcp.json` committed to git (or still in history), `Bash(*)` / `git push:*` / bypass mode, and missing deny rules. `--fix --apply` repairs them with backups. Never prints a full secret. |
+| **[bash-checkpoint](skills/bash-checkpoint)** | An **undo button for shell commands**. A PreToolUse hook that snapshots your files before `rm`, `mv`, `git clean`, `sed -i`…, **blocks** `rm -rf ~`, `rm -rf /` and `Remove-Item -Recurse C:\`, and makes you confirm force-pushes and `git reset --hard`, even in bypass mode. `restore <id>` brings files back, including uncommitted and untracked ones. |
+| **[claude-token-audit](skills/claude-token-audit)** | **Where do your limits go?** Reads your local session logs: tokens by project, session, model and day, peak context per session, which tools flood the context, the biggest single outputs, and what loads into every session (CLAUDE.md, MCP servers, skills), with specific fixes. 200 MB of logs in ~4 s. |
 
 ### Ship a website
 | Skill | What it does |
@@ -39,6 +46,8 @@ Real output, a page with proper tags vs one without:
 ![link-preview-check mock cards: a page with og tags vs example.com without](docs/link-preview-check.png)
 
 ## Bugs these caught on real projects
+- **claude-token-audit:** on my own machine, one session peaked at 866k tokens of context, and `Read` produced 57% of all tool output. Splitting sessions per task and reading files with offset/limit are the two biggest savings.
+- **bash-checkpoint:** tested by snapshotting a repo, running a real `rm -rf src`, and restoring: the committed file, an *uncommitted edit* and a *brand-new untracked file* all came back, with branches, index and stash untouched.
 - **link-preview-check / site-qa:** a portfolio built as a Vite SPA served *"Web Developer & Content Creator"* as the title of every page, so `/about` and each project page shared with the homepage's preview. The fix (per-route static HTML from a tiny Vite plugin) is written up in the skill.
 - **itch-html5-package:** a three.js game that waited forever on itch.io because the YouTube Playables SDK thought itch's iframe was YouTube.
 - **cf-pages-deploy:** `wrangler pages project create` in wrangler 4.15x silently goes through "Pages in Workers" and can create a Worker instead. The skill forces a classic Pages project and verifies it.

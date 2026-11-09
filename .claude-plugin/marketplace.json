@@ -4,17 +4,20 @@
     "name": "Binay Bhandari"
   },
   "metadata": {
-    "description": "Practical, tested Claude Code skills for shipping websites, games and videos."
+    "description": "Tested Claude Code skills: keep Claude Code safe and cheap, ship websites, web games and videos."
   },
   "plugins": [
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "Six practical skills: brave-cdp, cf-pages-deploy, site-qa, link-preview-check, itch-html5-package, event-recap-video.",
-      "version": "0.4.0",
+      "description": "Nine tested skills: Claude Code safety (secret audit, shell-command checkpoints, token audit), shipping websites and web games, browser control, recap videos.",
+      "version": "0.5.0",
       "skills": [
+        "./skills/bash-checkpoint",
         "./skills/brave-cdp",
         "./skills/cf-pages-deploy",
+        "./skills/claude-safety-audit",
+        "./skills/claude-token-audit",
         "./skills/event-recap-video",
         "./skills/itch-html5-package",
         "./skills/link-preview-check",

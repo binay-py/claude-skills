@@ -1,7 +1,7 @@
 {
   "name": "binay-skills",
-  "version": "0.4.0",
-  "description": "Practical, tested Claude Code skills for shipping websites, games and videos.",
+  "version": "0.5.0",
+  "description": "Tested Claude Code skills: keep Claude Code safe and cheap, ship websites, web games and videos.",
   "author": {
     "name": "Binay Bhandari"
   },
@@ -13,16 +13,23 @@
     "claude-code",
     "cloudflare",
     "cloudflare-pages",
+    "cost",
     "deploy",
     "ffmpeg",
     "gamedev",
+    "hooks",
     "html5-games",
     "itch-io",
     "link-preview",
     "open-graph",
     "qa",
+    "safety",
+    "secrets",
+    "security",
     "seo",
     "skills",
+    "tokens",
+    "usage",
     "video"
   ]
 }
