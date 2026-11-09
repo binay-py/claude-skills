@@ -26,7 +26,9 @@ const inside = (child, parent) => { const c = norm(child), q = norm(parent); ret
 const git = (cwd, args, env) => spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env }, timeout: 25000, maxBuffer: 64 * 1024 * 1024 });
 
 // ---------- rules ----------
-const HOME_RE = String.raw`(~|\$HOME|"\$HOME"|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%|${os.homedir().replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').replace(/\\\\/g, '[\\\\/]')})`;
+// The current user's home, any user's home folder (C:\Users\<name>, /home/<name>, /Users/<name>, /root),
+// and the folders that hold them. Deeper paths (/home/alice/project) are NOT matched: TARGET requires the path to end here.
+const HOME_RE = String.raw`(~|\$HOME|"\$HOME"|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%|${os.homedir().replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').replace(/\\\\/g, '[\\\\/]')}|[A-Za-z]:[\\/]Users(?:[\\/][^\\/\s"';&|]+)?|/home(?:/[^/\s"';&|]+)?|/Users(?:/[^/\s"';&|]+)?|/root)`;
 const ROOT_RE = String.raw`(/|/\*|[A-Za-z]:[\\/]?\*?|\\\\)`;
 const TARGET = String.raw`["']?(${HOME_RE}|${ROOT_RE})[\\/]?["']?(\s|$|;|&|\|)`;
 // Block rules apply per command segment, only when the segment actually RUNS the program named

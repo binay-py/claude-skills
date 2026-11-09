@@ -35,3 +35,11 @@ snapshot|cd src && rm old.js
 snapshot|sed -i 's/a/b/' x.js
 ask|psql -c "DROP TABLE users"
 none|cat package.json
+block|rm -rf /home/alice
+block|sudo rm -rf /home/
+block|rm -rf /Users/alice
+block|rm -rf /root
+block|Remove-Item -Recurse -Force C:\Users\someone
+snapshot|rm -rf /home/alice/project/build
+snapshot|rm -rf /Users/alice/Downloads/old
+snapshot|Remove-Item -Recurse -Force C:\Users\someone\AppData\Local\Temp\x
