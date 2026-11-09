@@ -172,8 +172,10 @@ export async function page(cdp, { url = 'about:blank', match } = {}) {
     },
     async waitFor(expression, timeout = 30000) {
       const end = Date.now() + timeout;
-      while (Date.now() < end) { try { const v = await p.eval(expression); if (v) return v; } catch {} await sleep(250); }
-      throw new Error('timeout waiting for: ' + expression);
+      let last;
+      while (Date.now() < end) { try { const v = await p.eval(expression); if (v) return v; last = undefined; } catch (e) { last = e.message; } await sleep(250); }
+      throw new Error('timeout waiting for: ' + expression + (last ? `
+  last error: ${last}` : ''));
     },
     async goto(u, timeout = 45000) {
       await send('Page.navigate', { url: u });
@@ -197,7 +199,9 @@ export async function page(cdp, { url = 'about:blank', match } = {}) {
     async key(key, modifiers = 0) { // modifiers: 1 Alt, 2 Ctrl, 4 Meta, 8 Shift
       const code = KEYS[key] ?? key.toUpperCase().charCodeAt(0);
       const base = { key, modifiers, windowsVirtualKeyCode: code, code: key.length === 1 ? 'Key' + key.toUpperCase() : key };
-      await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base });
+      // Default actions (form submit on Enter, typing a char) only happen when keyDown carries text.
+      const text = key === 'Enter' ? '\r' : key.length === 1 && !(modifiers & 6) ? key : undefined;
+      await send('Input.dispatchKeyEvent', text ? { type: 'keyDown', text, unmodifiedText: text, ...base } : { type: 'rawKeyDown', ...base });
       await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
     },
     async screenshot(file) {
@@ -213,7 +217,7 @@ export async function page(cdp, { url = 'about:blank', match } = {}) {
     },
     close: () => created ? cdp.send('Target.closeTarget', { targetId: target.targetId }) : cdp.send('Target.detachFromTarget', { sessionId }),
   };
-  if (url !== 'about:blank' && created) await p.waitFor(`document.readyState === 'complete'`, 45000).catch(() => {});
+  if (url !== 'about:blank' && created) await p.waitFor(`location.href !== 'about:blank' && document.readyState === 'complete'`, 45000);
   return p;
 }
 
@@ -281,7 +285,13 @@ async function main() {
     if (cmd === 'run') {
       const job = await import(pathToFileURL(path.resolve(rest[0])).href);
       const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a);
-      await job.default({ cdp, page: o => page(cdp, o), tabs: () => tabs(cdp), waitEvent: (m, o) => waitEvent(cdp, m, o), downloadsTo: d => downloadsTo(cdp, d), log, args: rest.slice(1) });
+      const opened = []; // tabs the job opens are closed afterwards, even if it throws
+      const openPage = async o => { const pg = await page(cdp, o); opened.push(pg); return pg; };
+      try {
+        await job.default({ cdp, page: openPage, tabs: () => tabs(cdp), waitEvent: (m, o) => waitEvent(cdp, m, o), downloadsTo: d => downloadsTo(cdp, d), log, args: rest.slice(1) });
+      } finally {
+        for (const pg of opened) await pg.close().catch(() => {});
+      }
     }
   } finally { cdp.close(); }
 }

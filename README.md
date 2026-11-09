@@ -2,6 +2,8 @@
 
 Practical [Claude Code](https://claude.com/claude-code) skills I use every week. They're battle-tested on real jobs, not demos.
 
+![brave-cdp running a whole browser job on one connection](docs/demo.gif)
+
 | Skill | What it does |
 |---|---|
 | **[brave-cdp](skills/brave-cdp)** | Lets Claude drive **your own logged-in Brave / Chrome / Edge** over the DevTools Protocol, using **one connection** so you click "Allow remote debugging?" once instead of 20 times. Zero dependencies, one file. |
