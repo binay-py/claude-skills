@@ -11,7 +11,7 @@ Practical [Claude Code](https://claude.com/claude-code) skills I use every week.
 
 In Claude Code:
 ```
-/plugin marketplace add YOUR_GITHUB_USER/claude-skills
+/plugin marketplace add binay-py/claude-skills
 /plugin install binay-skills@binay-skills
 ```
 Or copy a single skill folder into `~/.claude/skills/`.
