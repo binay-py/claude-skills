@@ -1,7 +1,7 @@
 {
   "name": "binay-skills",
-  "version": "0.7.0",
-  "description": "Tested Claude Code skills: keep Claude Code safe and cheap, ship websites, web games and videos.",
+  "version": "1.0.0",
+  "description": "Tested Claude Code skills: keep Claude Code safe and cheap, and ship websites, web games, videos and client work.",
   "author": {
     "name": "Binay Bhandari"
   },
@@ -10,6 +10,7 @@
     "accessibility",
     "browser-automation",
     "cdp",
+    "changelog",
     "claude-code",
     "claude-md",
     "cloudflare",
@@ -17,6 +18,7 @@
     "cost",
     "deploy",
     "docker",
+    "env",
     "ffmpeg",
     "fiverr",
     "freelance",
@@ -26,19 +28,24 @@
     "isolation",
     "itch-io",
     "link-preview",
+    "mcp",
     "memory",
     "open-graph",
     "proposals",
     "qa",
+    "readme",
     "safety",
     "sandbox",
     "secrets",
     "security",
     "seo",
     "skills",
+    "supply-chain",
+    "thumbnails",
     "tokens",
     "upwork",
     "usage",
-    "video"
+    "video",
+    "visual-regression"
   ]
 }

@@ -4,14 +4,14 @@
     "name": "Binay Bhandari"
   },
   "metadata": {
-    "description": "Tested Claude Code skills: keep Claude Code safe and cheap, ship websites, web games and videos."
+    "description": "Tested Claude Code skills: keep Claude Code safe and cheap, and ship websites, web games, videos and client work."
   },
   "plugins": [
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "12 tested skills: Claude Code safety (sandbox, secret audit, shell-command undo, token audit, CLAUDE.md doctor), shipping websites and web games, freelance proposals, browser control, recap videos.",
-      "version": "0.7.0",
+      "description": "22 tested Claude Code skills: keep Claude Code safe (secret audit, shell undo, sandbox, package guard) and cheap (token audit, read guard, handoff, MCP audit), and ship websites, repos, web games, videos and client work.",
+      "version": "1.0.0",
       "skills": [
         "./skills/bash-checkpoint",
         "./skills/brave-cdp",
@@ -20,11 +20,21 @@
         "./skills/claude-safety-audit",
         "./skills/claude-sandbox",
         "./skills/claude-token-audit",
+        "./skills/env-doctor",
         "./skills/event-recap-video",
         "./skills/freelance-proposal",
         "./skills/itch-html5-package",
         "./skills/link-preview-check",
-        "./skills/site-qa"
+        "./skills/mcp-audit",
+        "./skills/package-guard",
+        "./skills/read-guard",
+        "./skills/readme-upgrade",
+        "./skills/release-notes",
+        "./skills/secret-commit-guard",
+        "./skills/session-handoff",
+        "./skills/site-qa",
+        "./skills/thumbnail-maker",
+        "./skills/visual-diff"
       ]
     }
   ]
