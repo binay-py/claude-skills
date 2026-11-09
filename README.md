@@ -118,7 +118,7 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 | Skill | Type | Description |
 |---|---|---|
 | [gif-maker](skills/gif-maker) | CLI | GIFs from HTML animations, terminal sessions, video clips or images, sized to a file-size budget. |
-| [thumbnail-maker](skills/thumbnail-maker) | CLI | YouTube and social thumbnails with large text and a readability check at small sizes. |
+| [thumbnail-maker](skills/thumbnail-maker) | CLI | YouTube and social thumbnails: a large title over a real screenshot (circled and annotated) or a cut-out photo, with readability checks. |
 | [event-recap-video](skills/event-recap-video) | CLI, Guide | Turns event photos and videos into a recap video, a vertical version and a beat-synced reel. |
 
 ### Freelance and browser
@@ -137,10 +137,10 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 </details>
 
 <details>
-<summary>thumbnail-maker: two generated thumbnails</summary>
+<summary>thumbnail-maker: real screenshots, circled and annotated</summary>
 <br>
-<img src="skills/thumbnail-maker/examples/pop-photo.jpg" width="400" alt="Thumbnail with large white text and a red keyword box on yellow">
-<img src="skills/thumbnail-maker/examples/green-emoji.jpg" width="400" alt="Thumbnail in the green style">
+<img src="skills/thumbnail-maker/examples/tech-dark.jpg" width="400" alt="Thumbnail: 'Claude almost deleted everything' above a terminal screenshot with the rm -rf line circled in red">
+<img src="skills/thumbnail-maker/examples/tech-light.jpg" width="400" alt="Thumbnail: 'This npm package doesn't exist' above a terminal line circled in red">
 </details>
 
 <details>

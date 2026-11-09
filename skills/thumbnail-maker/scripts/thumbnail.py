@@ -26,7 +26,11 @@ PRESETS = {
     "tech":  dict(bg=("#00D9FF", "#1E3BFF"), glow="#9BF6FF", fill="#FFFFFF", stroke="#0A1A4A", hl_bg="#0A1A4A", hl_fg="#3CF4FF", pill_bg="#0A1A4A", pill_fg="#3CF4FF"),
     "red":   dict(bg=("#FF4436", "#B0001A"), glow="#FF9C8F", fill="#FFFFFF", stroke="#3A0008", hl_bg="#FFE600", hl_fg="#111111", pill_bg="#FFFFFF", pill_fg="#C8001E"),
     "green": dict(bg=("#43F59A", "#00994A"), glow="#C8FFE0", fill="#FFFFFF", stroke="#063D1F", hl_bg="#FFE600", hl_fg="#063D1F", pill_bg="#063D1F", pill_fg="#5CFFA6"),
+    # clean presets: one flat color + one accent (what education/tech channels mostly use)
+    "dark":  dict(bg=("#181818", "#0E0E0E"), glow="#2A2A2A", fill="#FFFFFF", stroke="#000000", hl_bg="#FFD400", hl_fg="#111111", pill_bg="#FFD400", pill_fg="#111111"),
+    "light": dict(bg=("#F7F7F5", "#E9E9E6"), glow="#FFFFFF", fill="#111111", stroke="#FFFFFF", hl_bg="#E10600", hl_fg="#FFFFFF", pill_bg="#111111", pill_fg="#FFFFFF"),
 }
+SOLID = {"pop": "#FFC800", "tech": "#0F5BFF", "red": "#D3001F", "green": "#13B860", "dark": "#141414", "light": "#F3F3F1"}
 
 
 def rgb(c):
@@ -50,6 +54,71 @@ def contrast(a, b):
 
 
 # ---------------------------------------------------------------- background
+def clean_background(W, H, style, P, bg_path=None):
+    """Flat color with a soft vignette, or a real photo blurred and darkened so text sits on it cleanly."""
+    if bg_path:
+        photo = ImageOps.fit(ImageOps.exif_transpose(Image.open(bg_path)).convert("RGB"), (W, H), Image.LANCZOS)
+        photo = photo.filter(ImageFilter.GaussianBlur(max(W, H) / 70))
+        dark = lum(rgb(P["fill"])) > 0.5  # light text -> darken the photo; dark text -> lighten it
+        img = ImageEnhance.Brightness(photo).enhance(0.55 if dark else 1.35)
+    else:
+        img = Image.new("RGB", (W, H), rgb(SOLID.get(style, P["bg"][1])))
+    # vignette: corners ~14% darker, centre untouched
+    v = Image.radial_gradient("L").resize((W, H), Image.BICUBIC).point(lambda x: int(min(255, max(0, (x - 120) * 0.42))))
+    return Image.composite(Image.new("RGB", (W, H), (0, 0, 0)), img, v)
+
+
+def hand_ellipse(img, cx, cy, rx, ry, color, width):
+    """A slightly imperfect, double-stroked ellipse, like a quick red circle drawn on a screenshot."""
+    d = ImageDraw.Draw(img)
+    for k, (dx, dy, s) in enumerate([(0, 0, 1.0), (width * 0.35, -width * 0.25, 1.04)]):
+        pts = []
+        for i in range(0, 380, 4):  # a bit more than 360°: the stroke overshoots its start like a real pen
+            t = math.radians(i - 20)
+            wob = 1 + 0.025 * math.sin(3 * t + k)
+            pts.append((cx + dx + rx * s * wob * math.cos(t), cy + dy + ry * s * wob * math.sin(t)))
+        d.line(pts, fill=(255, 255, 255), width=int(width * 1.8), joint="curve")
+        d.line(pts, fill=color, width=int(width), joint="curve")
+
+
+def hand_arrow(img, x0, y0, x1, y1, color, width):
+    """Curved arrow from (x0,y0) to (x1,y1) with a white edge so it reads on any background."""
+    d = ImageDraw.Draw(img)
+    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+    nx, ny = -(y1 - y0), (x1 - x0)
+    L = math.hypot(nx, ny) or 1
+    cx, cy = mx + nx / L * L * 0.32, my + ny / L * L * 0.32  # bend the curve so it arrives steeply
+    pts = [((1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t * t * x1, (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t * t * y1) for t in [i / 40 for i in range(41)]]
+    ang = math.atan2(pts[-1][1] - pts[-4][1], pts[-1][0] - pts[-4][0])
+    head = width * 3.2
+    tip = pts[-1]
+    wing = [(tip[0] - head * math.cos(ang - 0.5), tip[1] - head * math.sin(ang - 0.5)), tip, (tip[0] - head * math.cos(ang + 0.5), tip[1] - head * math.sin(ang + 0.5))]
+    for col, w in (((255, 255, 255), width * 1.9), (color, width)):
+        d.line(pts[:-1], fill=col, width=int(w), joint="curve")
+        d.line(wing, fill=col, width=int(w), joint="curve")
+
+
+def screenshot_card(path, w, h, radius):
+    """Real screenshot fitted into w x h (no crop of important edges: contain, then rounded corners + shadow)."""
+    src = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    k = min(w / src.width, h / src.height)  # scale up OR down to fill the box (thumbnail() only shrinks)
+    src = src.resize((max(1, round(src.width * k)), max(1, round(src.height * k))), Image.LANCZOS)
+    w, h = src.size
+    m = radius * 2
+    card = Image.new("RGBA", (w + 2 * m, h + 2 * m), (0, 0, 0, 0))
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, w - 1, h - 1), radius, fill=255)
+    sh = Image.new("L", card.size, 0)
+    sh.paste(mask, (m, m))
+    sh = sh.filter(ImageFilter.GaussianBlur(radius * 0.9)).point(lambda v: int(v * 0.45))
+    card.paste(Image.new("RGBA", card.size, (0, 0, 0, 255)), (0, int(radius * 0.5)), sh)
+    border = Image.new("L", (w + 4, h + 4), 0)
+    ImageDraw.Draw(border).rounded_rectangle((0, 0, w + 3, h + 3), radius + 2, fill=255)
+    card.paste(Image.new("RGBA", border.size, (255, 255, 255, 255)), (m - 2, m - 2), border)
+    card.paste(src, (m, m), mask)
+    return card, m, w, h
+
+
 def background(W, H, P, bg_path=None):
     c1, c2 = Image.new("RGB", (W, H), rgb(P["bg"][0])), Image.new("RGB", (W, H), rgb(P["bg"][1]))
     # diagonal gradient: top-left = color 1, bottom-right = color 2
@@ -319,9 +388,45 @@ def build(a):
             P["hl_fg"] = "#111111" if lum(rgb(a.accent)) > 0.35 else "#FFFFFF"
     hl_mode = a.highlight
     portrait = H > W
-    img = background(W, H, P, a.bg)
+    img = clean_background(W, H, a.style, P, a.bg) if a.look == "clean" else background(W, H, P, a.bg)
     notes = []
 
+    def burst(cx, cy):  # sunburst rays only in the old "burst" look
+        if a.look == "burst":
+            rays(img, cx, cy)
+
+    shot = None  # (card, x, y, w, h) of a real screenshot, for circles/arrows later
+    wide_shot = False
+    if a.shot:
+        radius = max(10, round(min(W, H) * 0.02))
+        with Image.open(a.shot) as _s:
+            wide_shot = not portrait and _s.width / _s.height > 1.9  # a cropped line or two: title on top, shot below
+        if wide_shot:
+            sw, sh_ = int(W * 0.92), int(H * 0.46)
+        elif portrait:
+            sw, sh_ = int(W * 0.9), int(H * 0.5)
+        else:
+            sw, sh_ = int(W * 0.56), int(H * 0.82)
+        card, m, iw, ih = screenshot_card(a.shot, sw, sh_, radius)
+        if wide_shot:
+            x, y = int((W - iw) / 2), int(H * 0.95 - ih)
+        elif portrait:
+            x, y = int((W - iw) / 2), int(H * 0.44)
+        else:
+            x, y = int(W * 0.965 - iw), int((H - ih) / 2)
+        img.paste(card, (x - m, y - m), card)
+        if a.circle:
+            fx, fy, fr = (float(v) for v in a.circle.split(","))
+            cx, cy = x + fx * iw, y + fy * ih
+            rx = fr * iw * 1.1                                  # r = half-width of the thing, as a fraction of the shot width
+            rx = min(rx, cx - W * 0.025, W * 0.975 - cx)         # never run off the canvas
+            ry = min(rx * 0.42, ih * 0.45)                      # keep it a flat oval around a line, never taller than the shot
+            hand_ellipse(img, cx, cy, rx, ry, rgb(a.mark_color), max(5, round(min(W, H) * 0.009)))
+            shot = (cx, cy, rx, ry)
+        else:
+            shot = (x + iw / 2, y + ih / 2, 0, 0)
+
+    front = None
     photo = None
     if a.photo:
         src = Image.open(a.photo)
@@ -333,15 +438,24 @@ def build(a):
             notes.append("emoji skipped: no color emoji font found (or this emoji is not in it)")
 
     # regions
-    side = photo or emoji
-    if portrait:
+    side = photo or emoji or a.shot
+    if portrait and a.shot:
+        text_box = (0.06 * W, 0.05 * H, 0.94 * W, 0.40 * H)
+        align = "center"
+    elif portrait:
         text_box = (0.06 * W, 0.05 * H, 0.94 * W, (0.44 if side else 0.80) * H)
         align = "center"
+    elif a.shot and wide_shot:
+        text_box = (0.05 * W, 0.05 * H, 0.95 * W, 0.47 * H)
+        align = "center"
+    elif a.shot:
+        text_box = (0.045 * W, 0.10 * H, 0.38 * W, 0.90 * H)
+        align = "left"
     elif side:
-        text_box = (0.05 * W, 0.08 * H, 0.59 * W, 0.92 * H)
+        text_box = (0.05 * W, 0.08 * H, (0.62 if photo == "cutout" else 0.59) * W, 0.92 * H)
         align = "left"
     else:
-        text_box = (0.06 * W, 0.08 * H, 0.94 * W, 0.92 * H)
+        text_box = (0.06 * W, 0.08 * H, 0.94 * W, 0.80 * H)  # stop above the bottom band: YouTube's timestamp sits bottom-right
         align = "center"
     if a.align:
         align = a.align
@@ -358,10 +472,10 @@ def build(a):
         cut = cut.resize((tw, th), Image.LANCZOS)
         st = max(8, round(min(W, H) * 0.016))
         sticker = outlined(cut, st)
-        cx = W * (0.5 if portrait else 0.79)
-        rays(img, int(cx), int(H * (0.75 if portrait else 0.45)))
+        cx = W * (0.5 if portrait else 0.765)  # slightly over the text edge: the person stands in front of it
+        burst(int(cx), int(H * (0.75 if portrait else 0.45)))
         pad = st * 3
-        img.paste(sticker, (int(cx - sticker.width / 2), H - th - pad + int(st * 1.5)), sticker)
+        front = (sticker, (int(cx - sticker.width / 2), H - th - pad + int(st * 1.5)))  # pasted after the text
     elif photo:
         border = max(8, round(min(W, H) * 0.016))
         if portrait:
@@ -374,7 +488,7 @@ def build(a):
             d0 = int(min(W * (0.7 if portrait else 0.36), H * (0.42 if portrait else 0.74)))
             cw = ch = d0
             top = H * (0.52 if portrait else 0.5) - d0 / 2
-        rays(img, int(cx), int(top + ch / 2))
+        burst(int(cx), int(top + ch / 2))
         card, m = photo_card(a.photo, cw, ch, a.photo_shape, border)
         if a.photo_shape != "circle":
             card = card.rotate(a.tilt, resample=Image.BICUBIC, expand=True)
@@ -391,7 +505,7 @@ def build(a):
             if portrait:
                 pos = (int(W / 2 - em.width / 2), int(H * 0.60))
             else:
-                rays(img, int(W * 0.78), int(H * 0.5))
+                burst(int(W * 0.78), int(H * 0.5))
                 pos = (int(W * 0.78 - em.width / 2), int(H * 0.5 - em.height / 2))
         img.paste(em, pos, em)
 
@@ -420,6 +534,23 @@ def build(a):
     if a.subtitle:
         sub_size = int(min(W, H) * 0.058)
         sub_info = pill(img, a.subtitle, bx0, gy + tb_h + min(W, H) * 0.04, box_w, sub_size, P, align, box_w, find_font("bold"))
+    if front:  # the person stands in front of the text
+        img.paste(front[0], front[1], front[0])
+    if shot and a.arrow and shot[2]:
+        tx0, ty0, tx1, ty1 = tbox
+        vertical = portrait or wide_shot
+        sx, sy = ((tx0 + tx1) / 2, ty1 + min(W, H) * 0.02) if vertical else (tx1 + min(W, H) * 0.03, (ty0 + ty1) / 2)
+        gap = min(W, H) * 0.025
+        cx, cy, rx, ry = shot
+        if vertical and (cy - ry) - ty1 < H * 0.2:
+            # no room between title and circle: come in from the right, aimed at the circle's side
+            sx, sy = min(tx1 - min(W, H) * 0.05, cx + rx + W * 0.22), ty1 + gap
+            ex, ey = cx + rx + gap, cy
+        elif vertical:
+            ex, ey = max(cx - rx * 0.5, min(cx + rx * 0.5, sx)), cy - ry - gap   # land on top of the circle, below the start
+        else:
+            ex, ey = cx - rx - gap, cy
+        hand_arrow(img, sx, sy, ex, ey, rgb(a.mark_color), max(6, round(min(W, H) * 0.011)))
 
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -461,6 +592,15 @@ def build(a):
                 warns.append(f"keyword text vs its box is only {contrast(hf, hb):.1f}:1")
         elif contrast(hb, rgb(P["stroke"])) < 3:
             warns.append(f"keyword color vs outline is only {contrast(hb, rgb(P['stroke'])):.1f}:1: pick a lighter --accent")
+    ts = (W * 0.80, H * 0.84, W, H)  # where YouTube draws the video length
+    if not portrait and tbox[2] > ts[0] and tbox[3] > ts[1]:
+        warns.append("title reaches the bottom-right corner, where YouTube's timestamp covers it")
+    sq = img.convert("L").resize((48, 27), Image.BOX).filter(ImageFilter.GaussianBlur(1.2))
+    bx = tuple(int(v) for v in (tbox[0] * 48 / W, tbox[1] * 27 / H, max(tbox[0] * 48 / W + 1, tbox[2] * 48 / W), max(tbox[1] * 27 / H + 1, tbox[3] * 27 / H)))
+    inside = list(sq.crop(bx).get_flattened_data() if hasattr(sq, 'get_flattened_data') else sq.crop(bx).getdata())
+    spread = (max(inside) - min(inside)) / 255 if inside else 0
+    if spread < 0.18:
+        warns.append(f"squint test: the title area is nearly flat when blurred ({spread:.2f}); it won't pop in the feed")
     if a.subtitle and sub_info and sub_info[1] * scale < 5:
         notes.append(f"subtitle is {sub_info[1] * scale:.1f}px tall in search results: fine as a secondary line, unreadable there")
     report = [
@@ -533,7 +673,7 @@ def main():
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
-    p = argparse.ArgumentParser(description="Bright, bold YouTube/social thumbnails.")
+    p = argparse.ArgumentParser(description="Bold, readable YouTube/social thumbnails.")
     p.add_argument("--title", required=True, help='2-6 words; wrap the keyword in *stars* to highlight it')
     p.add_argument("--subtitle", help="short second line shown in a pill")
     p.add_argument("--photo", help="person/face photo; PNG with transparency gets a cut-out sticker outline")
@@ -541,6 +681,11 @@ def main():
     p.add_argument("--tilt", type=float, default=3, help="degrees to rotate a rect photo card (default 3)")
     p.add_argument("--emoji", help="one emoji, drawn as a sticker (needs a color emoji font)")
     p.add_argument("--style", choices=sorted(PRESETS), default="pop")
+    p.add_argument("--look", choices=["clean", "burst"], default="clean", help="clean: flat color or blurred photo (default); burst: the old sunburst rays")
+    p.add_argument("--shot", help="a real screenshot to show (tech/tutorial thumbnails)")
+    p.add_argument("--circle", help="x,y,r as fractions of the screenshot: hand-drawn circle around that spot (e.g. 0.3,0.4,0.12)")
+    p.add_argument("--arrow", action="store_true", help="draw an arrow from the title to the circled spot")
+    p.add_argument("--mark-color", default="#FF2B2B", help="color of the circle and arrow")
     p.add_argument("--accent", help="hex color for the highlighted keyword (box or text)")
     p.add_argument("--highlight", choices=["box", "color"], default="box", help="keyword in a colored box, or just colored text")
     p.add_argument("--bg", help="background image (blurred, saturated, tinted with the style)")
