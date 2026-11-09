@@ -1,0 +1,56 @@
+# expected type (or "clean") | line.  {NAME} is replaced by a fake secret built in run.mjs,
+# so this repo never contains a literal token.
+GitHub token|const token = "{GH}";
+GitHub token|GITHUB_TOKEN={GH}
+GitHub token|github_pat: {GHPAT}
+AWS access key ID|aws_access_key_id = {AKIA}
+AWS secret access key|aws_secret_access_key = {AWSSECRET}
+Anthropic API key|ANTHROPIC_API_KEY={ANT}
+OpenAI API key|client = OpenAI(api_key="{OAI}")
+Stripe live key|stripe.api_key = '{STRIPE}'
+Slack token|SLACK={SLACK}
+Google API key|key: {GOOGLE}
+npm token|//registry.npmjs.org/:_authToken={NPM}
+Hugging Face token|HF={HF}
+JWT|Cookie: session={JWT}
+private key|-----BEGIN {RSA} PRIVATE KEY-----
+private key|-----BEGIN OPENSSH {PRIV} KEY-----
+database URL with password|DATABASE_URL=postgres://app:{PW}@db.internal:5432/app
+URL with embedded password|git remote add origin https://bob:{PW}@example.org/repo.git
+auth header|curl -H "Authorization: Bearer {B64}" https://api.x.io
+secret assigned to a variable|DB_PASSWORD={PW2}
+secret assigned to a variable|export API_KEY={PW3}
+secret assigned to a variable|  SECRET_KEY: {PW4}
+high-entropy string assigned to a secret-like name|const apiKey = "{B64}";
+high-entropy string assigned to a secret-like name|self.client_secret = '{HEX}'
+high-entropy string assigned to a secret-like name|"accessToken": "{B64}",
+secret passed as a flag|mysql --password={PW} -u root
+clean|const token = "{GH}"; // secret-guard: allow
+clean|AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+clean|const API_KEY = process.env.API_KEY;
+clean|api_key = os.environ["OPENAI_API_KEY"]
+clean|GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+clean|DB_PASSWORD=changeme
+clean|PASSWORD=your-password-here
+clean|SECRET_KEY=<put your key here>
+clean|TOKEN_EXPIRY_MS=86400000
+clean|PASSWORD_MIN_LENGTH=12
+clean|AUTH_TOKEN_HEADER=X_AUTH_TOKEN
+clean|const SECRET = config.secretValue;
+clean|TOKEN_URL=https://oauth2.googleapis.com/token
+clean|DATABASE_URL=postgres://user:password@localhost:5432/db
+clean|DATABASE_URL=postgres://${DB_USER}:${DB_PASS}@db:5432/app
+clean|headers: { Authorization: `Bearer ${token}` }
+clean|const tokenizer = "bert-base-uncased";
+clean|password = getPassword()
+clean|const csrfTokenName = "X-CSRF-TOKEN-HEADER-NAME";
+clean|cacheKey: "user-profile-settings-v2"
+clean|sk-learn is not a key
+clean|import { createSecretKey } from 'node:crypto';
+clean|const re = /\bgh[pousr]_[0-9A-Za-z]{30,}/;
+clean|"integrity": "sha512-abcDEF123/xyz"
+clean|SECRET_FILE=/run/secrets/db_password
+clean|DATABASE_URL=postgres://app:{password}@db:5432/app
+clean|const SECRET = /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-ant-[A-Za-z0-9_-]{20,}/;
+clean|key="-----BEGIN {PRIV} KEY-----\nXXXX\nXXXX\n-----END {PRIV} KEY-----"
+private key|"private_key": "-----BEGIN {PRIV} KEY-----\n{LONGB64}\n-----END {PRIV} KEY-----\n"

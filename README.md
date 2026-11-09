@@ -1,8 +1,8 @@
 # claude-skills
 
-**21 Claude Code skills that keep Claude Code safe and cheap, and help you ship websites, web games, videos and client work.** Each one is a small zero-dependency script plus a SKILL.md, tested against real projects (not toy demos) before it landed here.
+**22 Claude Code skills that keep Claude Code safe and cheap, and help you ship websites, web games, videos and client work.** Each one is a small zero-dependency script plus a SKILL.md, tested against real projects (not toy demos) before it landed here.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 21](https://img.shields.io/badge/skills-21-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 22](https://img.shields.io/badge/skills-22-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
 
 ![brave-cdp running a whole browser job on one connection](docs/demo.gif)
 
@@ -28,6 +28,7 @@ Or copy a single folder from `skills/` into `~/.claude/skills/`. Every script al
 | **[bash-checkpoint](skills/bash-checkpoint)** | An **undo button for shell commands**: a hook that snapshots files before `rm`, `mv`, `git clean`, `sed -i`…, **blocks** `rm -rf ~` / `Remove-Item -Recurse C:\` (even inside `bash -c`), and asks before force-push and `reset --hard`. 37-case test suite included. |
 | **[claude-sandbox](skills/claude-sandbox)** | Runs Claude Code in **Docker with only your project folder mounted**: non-root, all capabilities dropped, no sudo, `~/.claude` and SSH keys never visible. `--check` proves the isolation. |
 | **[package-guard](skills/package-guard)** | Stops **hallucinated and typosquatted packages** ("slopsquatting"): a hook that checks every `npm i` / `pip install` against the registry, blocks names that don't exist, and asks about look-alikes and brand-new packages. |
+| **[secret-commit-guard](skills/secret-commit-guard)** | A git **pre-commit hook that blocks commits containing keys and tokens** (any repo, not just Claude's), plus scans of the working tree and full history. 90-case test suite. |
 
 ## Keep Claude Code cheap
 | Skill | What it does |
