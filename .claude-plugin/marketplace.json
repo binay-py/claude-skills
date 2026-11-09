@@ -10,8 +10,8 @@
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "22 tested Claude Code skills: keep Claude Code safe (secret audit, shell undo, sandbox, package guard) and cheap (token audit, read guard, handoff, MCP audit), and ship websites, repos, web games, videos and client work.",
-      "version": "1.0.0",
+      "description": "23 tested Claude Code skills: keep Claude Code safe (secret audit, shell undo, sandbox, package guard) and cheap (token audit, read guard, handoff, MCP audit), and ship websites, repos, web games, GIFs, videos and client work.",
+      "version": "1.1.0",
       "skills": [
         "./skills/bash-checkpoint",
         "./skills/brave-cdp",
@@ -23,6 +23,7 @@
         "./skills/env-doctor",
         "./skills/event-recap-video",
         "./skills/freelance-proposal",
+        "./skills/gif-maker",
         "./skills/itch-html5-package",
         "./skills/link-preview-check",
         "./skills/mcp-audit",

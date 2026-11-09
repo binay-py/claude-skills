@@ -1,6 +1,6 @@
 {
   "name": "binay-skills",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Tested Claude Code skills: keep Claude Code safe and cheap, and ship websites, web games, videos and client work.",
   "author": {
     "name": "Binay Bhandari"
@@ -23,6 +23,7 @@
     "fiverr",
     "freelance",
     "gamedev",
+    "gif",
     "hooks",
     "html5-games",
     "isolation",
