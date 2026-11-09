@@ -43,4 +43,7 @@ node checkpoint.mjs test "rm -rf ~"    # see what the rules would do
 Restoring brings back deleted and modified files and leaves files created after the snapshot alone.
 
 ## Limits (tell the user)
-It's pattern-based, so a determined or obfuscated command (`eval $(echo …)`, a script file that deletes things) can get past it. It's a seatbelt, not a sandbox. Pair it with deny rules (`claude-safety-audit --fix`) and run risky work in a container.
+- It's pattern-based, so a determined or obfuscated command (`eval $(echo …)`, a script file that deletes things) can get past it. It's a seatbelt, not a sandbox. Pair it with deny rules (`claude-safety-audit --fix`) and run risky work in a container.
+- The snapshot runs *before* the command, so files the same command creates and then deletes can't be saved.
+- Block rules look at the whole command text, heredocs included, so a test script that merely *contains* `rm -rf ~` is blocked too. That's deliberate. Put such text in a file instead.
+- Quoted text is ignored for snapshot/ask decisions, so `git commit -m "rm old docs"` or `grep "rm"` does nothing. Compound commands (`cd dir && rm x`) are followed segment by segment.

@@ -48,11 +48,34 @@ const ASK = [
 ];
 const DESTRUCTIVE = /\b(rm|rmdir|unlink|shred|mv|truncate|Remove-Item|Move-Item|Clear-Content|Set-Content|Out-File|ri|del|erase|rd|move|ren|rename)\b|\bfind\b[^;|&]*\s-delete\b|\bsed\s+(-[a-zA-Z]*i|--in-place)|\bperl\s+-[a-zA-Z]*i|\bgit\s+(reset|clean|checkout|restore|stash|rm|mv)\b|(^|[^0-9&>|])>\s*(?!\/dev\/null|&|\$null|nul\b)["']?[\w./~\\-]/i;
 
+// Quoted text (grep patterns, commit messages, echo strings) shouldn't trigger snapshots or prompts.
+const unquote = cmd => cmd.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
 function classify(cmd) {
-  for (const [re, why] of BLOCK) if (re.test(cmd)) return { action: 'block', why };
-  for (const [re, why] of ASK) if (re.test(cmd)) return { action: 'ask', why };
-  if (DESTRUCTIVE.test(cmd)) return { action: 'snapshot' };
+  for (const [re, why] of BLOCK) if (re.test(cmd)) return { action: 'block', why }; // full text: rm -rf "$HOME" is quoted
+  const bare = unquote(cmd);
+  for (const [re, why] of ASK) if (re.test(bare)) return { action: 'ask', why };
+  if (DESTRUCTIVE.test(bare)) return { action: 'snapshot' };
   return { action: 'none' };
+}
+
+// Split "cd x && rm a; mv b c | …" into segments, following cd, and return the existing paths that
+// destructive segments act on (resolved against the folder they run in).
+const DESTRUCTIVE_CMD = /^(sudo\s+)?(rm|rmdir|unlink|shred|mv|truncate|Remove-Item|ri|Move-Item|Clear-Content|Set-Content|del|erase|rd|move|ren|rename|sed|perl|find)$/i;
+function destructiveTargets(cwd, cmd) {
+  const words = s => (s.match(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s]+/g) || []).map(w => w.replace(/^["']|["']$/g, ''));
+  const resolve = (dir, p) => path.resolve(dir, p.replace(/^~(?=$|[\\/])/, os.homedir()).replace(/^\$HOME(?=$|[\\/])/, os.homedir()));
+  let dir = cwd; const out = new Set();
+  for (const seg of cmd.split(/&&|\|\||;|\|(?!\|)|\n/)) {
+    const w = words(seg.trim()); if (!w.length) continue;
+    if (/^(cd|Set-Location|pushd)$/i.test(w[0]) && w[1]) { dir = resolve(dir, w[1]); continue; }
+    const redirect = seg.match(/(?:^|[^0-9&>|])>\s*(?!\/dev\/null|&|\$null|nul\b)("[^"]+"|'[^']+'|[^\s;|&]+)/);
+    if (redirect) out.add(resolve(dir, redirect[1].replace(/^["']|["']$/g, '')));
+    const cmdWord = w[0] === 'sudo' ? w[1] : w[0];
+    if (!cmdWord || !DESTRUCTIVE_CMD.test(cmdWord)) continue;
+    for (const a of w.slice(w[0] === 'sudo' ? 2 : 1)) if (!a.startsWith('-') && !/^s[/|#]/.test(a) && !/[*?]/.test(a)) out.add(resolve(dir, a));
+    if (w.some(a => /[*?]/.test(a))) out.add(dir); // globs: keep the folder they expand in
+  }
+  return { dir, targets: [...out] };
 }
 
 // ---------- snapshots ----------
@@ -73,9 +96,8 @@ function snapshotGit(cwd, id, cmd) {
   } finally { fs.rmSync(idx, { force: true }); }
 }
 function snapshotCopy(cwd, id, cmd) {
-  // copy existing paths that appear as arguments in the command
-  const args = (cmd.match(/"[^"]+"|'[^']+'|[^\s;|&]+/g) || []).map(a => a.replace(/^["']|["']$/g, '')).filter(a => !a.startsWith('-') && !/^(rm|mv|del|rd|rmdir|Remove-Item|Move-Item|sudo|sed|find|git)$/i.test(a));
-  const targets = [...new Set(args.map(a => path.resolve(cwd, a.replace(/^~(?=$|[\\/])/, os.homedir()))))].filter(p => { try { return fs.existsSync(p) && p !== path.parse(p).root && p !== os.homedir(); } catch { return false; } });
+  // copy the existing files/folders that destructive parts of the command act on
+  const targets = destructiveTargets(cwd, cmd).targets.filter(p => { try { return fs.existsSync(p) && p !== path.parse(p).root && p !== os.homedir(); } catch { return false; } });
   if (!targets.length) return null;
   let size = 0; const sizeOf = p => { const st = fs.statSync(p); if (st.isFile()) return st.size; let s = 0; for (const e of fs.readdirSync(p)) { s += sizeOf(path.join(p, e)); if (s > MAX_COPY) break; } return s; };
   for (const t of targets) { size += sizeOf(t); if (size > MAX_COPY) return { kind: 'skipped', reason: `targets are over ${MAX_COPY / 1048576} MB` }; }
@@ -101,7 +123,7 @@ function hook() {
   }
   if (c.action === 'snapshot' || c.action === 'ask') {
     const id = newId();
-    let snap = null; try { snap = snapshotGit(cwd, id, cmd) || snapshotCopy(cwd, id, cmd); } catch (e) { snap = { kind: 'error', reason: e.message }; }
+    let snap = null; try { const dir = destructiveTargets(cwd, cmd).dir; snap = snapshotGit(fs.existsSync(dir) ? dir : cwd, id, cmd) || snapshotCopy(cwd, id, cmd); } catch (e) { snap = { kind: 'error', reason: e.message }; }
     if (snap) {
       fs.mkdirSync(STORE, { recursive: true });
       fs.appendFileSync(LOG, JSON.stringify({ id, time: new Date().toISOString(), cwd, tool, command: cmd.slice(0, 500), ...snap }) + '\n');
@@ -119,7 +141,7 @@ else if (cmd === 'list') {
   const all = rest.includes('--all'), here = process.cwd();
   const rows = readLog().filter(r => all || (r.repo ? inside(here, r.repo) || inside(r.repo, here) : inside(here, r.cwd) || inside(r.cwd, here))).slice(-30);
   if (!rows.length) console.log(all ? 'no checkpoints yet' : 'no checkpoints for this folder (try --all)');
-  for (const r of rows) console.log(`${r.id}  ${r.time.slice(0, 19).replace('T', ' ')}  [${r.kind}]  ${r.command.slice(0, 90)}`);
+  for (const r of rows) console.log(`${r.id}  ${r.time.slice(0, 19).replace('T', ' ')}  [${r.kind}]  ${r.command.replace(/^\s*cd\s+("[^"]*"|'[^']*'|\S+)\s*(&&|;)\s*/, '').slice(0, 90)}`);
 } else if (cmd === 'show' || cmd === 'restore') {
   const r = readLog().find(x => x.id === rest[0]); if (!r) { console.log('unknown id; see: node checkpoint.mjs list --all'); process.exit(1); }
   if (r.kind === 'git') {
