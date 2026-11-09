@@ -1,0 +1,57 @@
+# expected packages (space separated, or (none)) | command
+npm:react|npm i react
+npm:typescript npm:@types/node|cd app && npm install -D typescript@5 @types/node@^20 --save-exact
+npm:zod|pnpm add zod
+npm:lodash npm:chalk|yarn add lodash chalk@^5
+npm:left-pad|yarn global add left-pad
+npm:hono|bun add hono
+npm:express|bun i express
+npm:@scope/pkg|npm install --save @scope/pkg@^2.1.0
+npm:lodash-es|npm i lodash@npm:lodash-es@4
+npm:cowsay|npm i -g cowsay --registry=https://registry.npmjs.org/
+npm:cowsay|npm --prefix ./x install cowsay
+npm:create-vite|npx -y create-vite@latest my-app
+npm:create-vite|npm create vite@latest my-app
+npm:create-next-app|npm init next-app
+npm:@angular/cli|pnpm dlx @angular/cli new my-app
+npm:cowsay|bunx cowsay hi
+npm:typescript|npx -p typescript tsc --init
+npm:zod|bash -c 'pnpm add zod'
+npm:sharp|sudo npm install sharp
+npm:react|NODE_ENV=dev npm i react
+(none)|npm install
+(none)|npm ci
+(none)|yarn install
+(none)|yarn
+(none)|pnpm install
+(none)|npm run build
+(none)|npm i ./local ../x git+https://github.com/a/b.git user/repo pkg.tgz file:../y
+(none)|npm i private-thing --registry https://npm.mycorp.local/
+(none)|echo "npm i react"
+(none)|git commit -m "npm install foo"
+pypi:requests pypi:numpy pypi:flask|pip install requests==2.31 'numpy>=1.2' flask[async]
+pypi:pandas|py -m pip install --user pandas
+pypi:pandas|python3 -m pip install -U pandas
+pypi:Django|pip3 install "Django>=4,<5"
+pypi:black|pipx install black
+pypi:httpx pypi:pydantic|uv add httpx; poetry add 'pydantic@^2'
+pypi:ruff|uv pip install ruff
+pypi:ruff|uvx ruff check .
+pypi:fastapi|pip install -r requirements.txt fastapi
+(none)|pip install torch --index-url https://download.pytorch.org/whl/cu121
+pypi:torch|pip install torch -t ./vendor
+(none)|python -m pip install -r requirements.txt
+(none)|pip install -e .
+(none)|pip install ./dist/pkg-1.0-py3-none-any.whl
+(none)|pip install git+https://github.com/a/b.git
+(none)|pip install foo -i https://pypi.mycorp.local/simple
+(none)|pip list
+(none)|python script.py install requests
+npm:react pypi:requests|cd web && npm i react && cd ../api && pip install requests
+npm:cowsay|npm exec cowsay hi
+npm:create-react-app|yarn dlx create-react-app x
+npm:hono|bun x hono
+pypi:httpie|uv tool install httpie
+pypi:cowsay|pipx run cowsay hi
+npm:zod|powershell -Command "npm i zod"
+npm:zod|cmd /c npm i zod
