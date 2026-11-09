@@ -2,7 +2,7 @@
 
 Hooks and scripts that stop Claude Code from deleting your home folder, installing packages that don't exist, leaking keys, and burning through your usage limits. Plus tools I use to ship websites, games and client work. 23 skills, no npm dependencies, MIT.
 
-<img src="docs/hero.gif" width="860" alt="A terminal: Claude runs rm -rf ~ /old-build (a stray space) and bash-checkpoint blocks it; it then tries to install stripe-node-sdk, which doesn't exist, and package-guard blocks it; npm install stripe goes through.">
+<img src="docs/demo-hooks.gif" width="860" alt="A terminal: Claude runs rm -rf ~ /old-build (a stray space) and bash-checkpoint blocks it; it then tries to install stripe-node-sdk, which doesn't exist, and package-guard blocks it; npm install stripe goes through.">
 
 That's real output from two of the hooks below.
 
