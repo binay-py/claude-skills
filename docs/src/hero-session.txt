@@ -1,0 +1,22 @@
+@title ~/projects/shop
+@prompt >
+@speed 34
+$ delete the old build folder and add stripe
+@pause 500
+
+[dim]Bash(rm -rf ~ /old-build)[/]
+[red]  ✘ blocked by bash-checkpoint: recursive delete of your home folder[/]
+[dim]    a stray space made that "~" and "/old-build". Your home folder is still there.[/]
+@pause 1100
+
+[dim]Bash(rm -rf old-build)[/]
+[green]  ✓ ran. Files were snapshotted first: checkpoint.mjs restore puts them back[/]
+@pause 1000
+
+[dim]Bash(npm install stripe-node-sdk)[/]
+[red]  ✘ blocked by package-guard: npm:stripe-node-sdk does not exist, possibly a hallucinated name[/]
+@pause 1100
+
+[dim]Bash(npm install stripe)[/]
+[green]  ✓ npm:stripe v23.1.0 · 33.7M downloads a week[/]
+@pause 2200

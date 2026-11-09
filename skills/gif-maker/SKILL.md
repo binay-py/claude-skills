@@ -39,7 +39,11 @@ Common options: `--max-mb 5`, `--fps`, `--colors 256`, `--width`, `--loop 0` (fo
 5. **Colors.** Flat colors and simple gradients beat photos and noise, which bloat the file. Big smooth gradients can band in 256 colors; use `--webp`/`--mp4` alongside for those, or add subtle texture.
 6. **Loop cleanly.** End where you started, use `--pingpong`, or design CSS animations whose duration divides `--dur`.
 7. **Motion design.** Use easing (`cubic-bezier`), stagger elements by 60–120 ms, and keep movement to 1–2 things at a time.
-8. **Check it.** Look at a few frames (`ffmpeg -i out.gif -vf "select='eq(n\,0)+eq(n\,30)',tile=2x1" -frames:v 1 check.png`) before calling it done.
+8. **Don't make it look AI-generated.** Viewers have learned the tells, and they make a project look low-effort:
+   - **Avoid:** purple-to-blue gradients and glowing "aurora" blobs; gradient-filled headline text (the fastest giveaway); emoji used as icons or section markers; rows of pill badges; frosted glass; three identical feature cards; everything centered; vague slogans ("supercharge your workflow").
+   - **Do:** show the real product doing a real thing with real output (a terminal, the actual UI, a before → after); flat solid backgrounds; one accent color used for meaning (red = blocked, green = ok); a plain system or monospace font; left-aligned content like a real screen; specific text a competitor couldn't reuse ("blocked `rm -rf ~ /old-build`").
+   - A plain screen capture of something real beats a polished motion-graphics banner. Use `terminal --theme light` or record the actual app with `html <url>`.
+9. **Check it.** Look at a few frames (`ffmpeg -i out.gif -vf "select='eq(n\,0)+eq(n\,30)',tile=2x1" -frames:v 1 check.png`) before calling it done.
 
 ## Limits
 - GIF is 256 colors per frame; photos and video look worse than MP4. Offer `--mp4` (GitHub READMEs can't autoplay MP4 from the repo, but issues, PRs and most sites can).

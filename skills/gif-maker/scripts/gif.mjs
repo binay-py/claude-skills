@@ -125,8 +125,8 @@ const framesInput = fps => ['-framerate', String(fps), '-i', path.join(work, 'f%
 // Format: "$ cmd" typed; other lines printed; "@pause 800"; "@clear"; "@title text"; "@speed 35" (ms/char);
 // "@prompt ❯"; colors auto (✓/✔ green, ✘/✗/error red, !/warn yellow, #/dim comment grey) or [green]..[/].
 function terminalHtml(src, theme) {
-  const T = theme === 'light' ? { bg: '#f6f8fa', win: '#ffffff', fg: '#1f2328', dim: '#6e7781', green: '#1a7f37', red: '#cf222e', yellow: '#9a6700', blue: '#0969da', bar: '#eaeef2' }
-    : { bg: '#0d1117', win: '#161b22', fg: '#e6edf3', dim: '#8b949e', green: '#3fb950', red: '#ff7b72', yellow: '#d29922', blue: '#79c0ff', bar: '#21262d' };
+  const T = theme === 'light' ? { bg: '#dcdcdc', win: '#ffffff', fg: '#1f2328', dim: '#6e7781', green: '#1a7f37', red: '#cf222e', yellow: '#9a6700', blue: '#0969da', bar: '#ececec', shadow: '0 2px 8px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12)' }
+    : { bg: '#0d1117', win: '#161b22', fg: '#e6edf3', dim: '#8b949e', green: '#3fb950', red: '#ff7b72', yellow: '#d29922', blue: '#79c0ff', bar: '#21262d', shadow: '0 18px 50px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.18)' };
   const lines = src.replace(/\r/g, '').split('\n');
   const ev = []; let t = 400, speed = 38, title = '', prompt = '$';
   for (const raw of lines) {
@@ -153,7 +153,7 @@ function terminalHtml(src, theme) {
   const data = JSON.stringify(ev.map(e => e.cmd !== undefined ? { ...e, html: esc(e.cmd) } : e.out !== undefined ? { t: e.t, html: color(e.out) } : e));
   return { total, html: `<!doctype html><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:${T.bg};}
-.win{position:absolute;inset:18px;background:${T.win};border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.18);overflow:hidden;display:flex;flex-direction:column}
+.win{position:absolute;inset:18px;background:${T.win};border-radius:10px;box-shadow:${T.shadow};overflow:hidden;display:flex;flex-direction:column}
 .bar{height:38px;background:${T.bar};display:flex;align-items:center;padding:0 14px;gap:8px;flex:none}
 .dot{width:12px;height:12px;border-radius:50%}.t{flex:1;text-align:center;color:${T.dim};font:600 13px system-ui,-apple-system,"Segoe UI",sans-serif;margin-right:52px}
 .term{flex:1;padding:16px 20px;font:15px/1.55 "Cascadia Mono","Cascadia Code",Consolas,"SF Mono",Menlo,"DejaVu Sans Mono",monospace;color:${T.fg};white-space:pre-wrap;word-break:break-word;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
