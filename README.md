@@ -1,15 +1,38 @@
 # claude-skills
 
-Practical [Claude Code](https://claude.com/claude-code) skills I use every week. They're battle-tested on real jobs, not demos.
+**Claude Code skills for shipping things: websites, web games and videos.** Each one is a single zero-dependency script plus a SKILL.md, tested against real projects (not toy demos) before it landed here.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Skills: 6](https://img.shields.io/badge/skills-6-orange) ![Dependencies: 0](https://img.shields.io/badge/npm%20dependencies-0-brightgreen) ![Node 22+](https://img.shields.io/badge/node-22%2B-339933)
 
 ![brave-cdp running a whole browser job on one connection](docs/demo.gif)
 
+### Ship a website
 | Skill | What it does |
 |---|---|
-| **[brave-cdp](skills/brave-cdp)** | Lets Claude drive **your own logged-in Brave / Chrome / Edge** over the DevTools Protocol, using **one connection** so you click "Allow remote debugging?" once instead of 20 times. Zero dependencies, one file. |
-| **[cf-pages-deploy](skills/cf-pages-deploy)** | Deploys a static site to **Cloudflare Pages** without leaking `.env`/`node_modules`/keys: stages a clean copy, scans for secrets, deploys, then verifies the live file matches **byte for byte**. Handles the wrangler 4.15x `pages project create` change and suffixed `*.pages.dev` URLs. |
-| **[event-recap-video](skills/event-recap-video)** | Turns hundreds of phone photos and videos from an event (conference, trip, wedding) into a hooky recap: 16:9 main cut, 9:16 version, and a 45 s beat-synced reel. Pure ffmpeg + Python. |
-| **[site-qa](skills/site-qa)** | Crawls a site in headless Chrome and writes a **prioritized QA report**: JS errors, failed requests, broken images/links, mobile sideways-scroll, missing viewport/SEO/Open Graph tags, alt text, unlabeled inputs, page weight, plus desktop and mobile screenshots. Run it before handing a site to a client. |
+| **[site-qa](skills/site-qa)** | Crawls a site in headless Chrome and writes a **prioritized QA report**: JS errors, failed requests, broken images and links, mobile sideways-scroll, missing viewport/SEO/Open Graph tags, alt text, unlabeled inputs, page weight, plus desktop and mobile screenshots. |
+| **[link-preview-check](skills/link-preview-check)** | Shows how your URL looks when shared on **WhatsApp, LinkedIn, X and Facebook**, the way their crawlers see it (no JS). Flags missing/relative/SVG/oversized og:images and **SPAs that serve the same title on every route**, and renders a page of mock cards. |
+| **[cf-pages-deploy](skills/cf-pages-deploy)** | Deploys to **Cloudflare Pages** without leaking `.env`, `node_modules` or keys. It stages a clean copy, scans for secrets, deploys, then checks the live file matches **byte for byte**. |
+
+### Ship a web game
+| Skill | What it does |
+|---|---|
+| **[itch-html5-package](skills/itch-html5-package)** | Checks an HTML5 build against **itch.io's rules** and zips it right. Catches the `Player.png` vs `player.png` **case mismatch** that works on Windows but 403s on itch, absolute `/` paths, `http://` requests, and the file/size limits. |
+
+### Drive your browser
+| Skill | What it does |
+|---|---|
+| **[brave-cdp](skills/brave-cdp)** | Lets Claude drive **your own logged-in Brave / Chrome / Edge** over the DevTools Protocol on **one connection**, so you click "Allow remote debugging?" once instead of 20 times. Real mouse and keyboard input, uploads, downloads, and a token-protected relay. |
+
+### Make a video
+| Skill | What it does |
+|---|---|
+| **[event-recap-video](skills/event-recap-video)** | Turns hundreds of phone photos and videos from an event into a hooky recap: 16:9 main cut, 9:16 version, and a 45 s **beat-synced** reel. ffmpeg + Python. |
+
+## Bugs these caught on real projects
+- **link-preview-check / site-qa:** a portfolio built as a Vite SPA served *"Web Developer & Content Creator"* as the title of every page, so `/about` and each project page shared with the homepage's preview. The fix (per-route static HTML from a tiny Vite plugin) is written up in the skill.
+- **itch-html5-package:** a three.js game that waited forever on itch.io because the YouTube Playables SDK thought itch's iframe was YouTube.
+- **cf-pages-deploy:** `wrangler pages project create` in wrangler 4.15x silently goes through "Pages in Workers" and can create a Worker instead. The skill forces a classic Pages project and verifies it.
+- **brave-cdp:** synthetic Enter key presses didn't submit forms (the key event needs `text: "\r"`), and pages returned before leaving `about:blank`. Both were found while recording the demo above.
 
 ## Install
 

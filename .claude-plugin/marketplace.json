@@ -4,18 +4,20 @@
     "name": "Binay Bhandari"
   },
   "metadata": {
-    "description": "Practical Claude Code skills: drive your real browser with one connection, and turn event footage into recap videos."
+    "description": "Practical, tested Claude Code skills for shipping websites, games and videos."
   },
   "plugins": [
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "brave-cdp (one-connection browser automation), cf-pages-deploy (safe, verified Cloudflare Pages deploys), site-qa (headless crawl + prioritized QA report) and event-recap-video (ffmpeg recaps + beat-synced reels).",
-      "version": "0.3.0",
+      "description": "Six practical skills: brave-cdp, cf-pages-deploy, site-qa, link-preview-check, itch-html5-package, event-recap-video.",
+      "version": "0.4.0",
       "skills": [
         "./skills/brave-cdp",
         "./skills/cf-pages-deploy",
         "./skills/event-recap-video",
+        "./skills/itch-html5-package",
+        "./skills/link-preview-check",
         "./skills/site-qa"
       ]
     }

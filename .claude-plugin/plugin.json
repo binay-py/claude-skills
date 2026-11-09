@@ -1,23 +1,28 @@
 {
   "name": "binay-skills",
-  "version": "0.3.0",
-  "description": "brave-cdp and event-recap-video skills for Claude Code.",
+  "version": "0.4.0",
+  "description": "Practical, tested Claude Code skills for shipping websites, games and videos.",
   "author": {
     "name": "Binay Bhandari"
   },
   "license": "MIT",
   "keywords": [
-    "claude-code",
-    "skills",
-    "cdp",
+    "accessibility",
     "browser-automation",
-    "ffmpeg",
-    "video",
+    "cdp",
+    "claude-code",
     "cloudflare",
     "cloudflare-pages",
     "deploy",
+    "ffmpeg",
+    "gamedev",
+    "html5-games",
+    "itch-io",
+    "link-preview",
+    "open-graph",
     "qa",
     "seo",
-    "accessibility"
+    "skills",
+    "video"
   ]
 }
