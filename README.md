@@ -28,6 +28,16 @@
 |---|---|
 | **[event-recap-video](skills/event-recap-video)** | Turns hundreds of phone photos and videos from an event into a hooky recap: 16:9 main cut, 9:16 version, and a 45 s **beat-synced** reel. ffmpeg + Python. |
 
+## link-preview-check: see your link the way WhatsApp sees it
+
+```bash
+node preview-check.mjs https://your-site.com /about /pricing
+```
+
+Real output, a page with proper tags vs one without:
+
+![link-preview-check mock cards: a page with og tags vs example.com without](docs/link-preview-check.png)
+
 ## Bugs these caught on real projects
 - **link-preview-check / site-qa:** a portfolio built as a Vite SPA served *"Web Developer & Content Creator"* as the title of every page, so `/about` and each project page shared with the homepage's preview. The fix (per-route static HTML from a tiny Vite plugin) is written up in the skill.
 - **itch-html5-package:** a three.js game that waited forever on itch.io because the YouTube Playables SDK thought itch's iframe was YouTube.
