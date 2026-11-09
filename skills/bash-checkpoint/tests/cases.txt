@@ -1,0 +1,37 @@
+block|rm -rf ~
+block|rm -rf ~/
+block|sudo rm -rf /
+block|rm -rf /*
+block|rm -rf "$HOME"
+block|/bin/rm -rf ~
+block|cd /tmp && rm -rf ~
+block|bash -c "rm -rf ~"
+block|sh -c 'rm -rf /'
+block|eval rm -rf ~
+block|powershell -Command "Remove-Item -Recurse -Force C:\"
+block|Remove-Item -Recurse -Force C:\
+block|Remove-Item C:\Users\Binay -Recurse -Force
+block|Remove-Item -Path ~ -Recurse
+block|rd /s /q C:\
+block|mkfs.ext4 /dev/sdb1
+block|dd if=/dev/zero of=/dev/sda
+block|diskpart
+none|git commit -m "mention mkfs, dd of=/dev/sda and diskpart in docs"
+snapshot|sed -i 's/rm -rf ~/x/' notes.md
+none|grep -n "rm -rf ~" README.md
+none|echo "never run rm -rf /" | wc -c
+snapshot|rm -rf ./build
+snapshot|rm -rf node_modules dist
+snapshot|rm -rf /tmp/build
+snapshot|Remove-Item -Recurse -Force .\dist
+ask|git push --force origin main
+none|git push origin main
+ask|git reset --hard HEAD~1
+ask|git checkout -- .
+none|git status
+snapshot|ls -la > files.txt
+none|npm test 2>/dev/null
+snapshot|cd src && rm old.js
+snapshot|sed -i 's/a/b/' x.js
+ask|psql -c "DROP TABLE users"
+none|cat package.json

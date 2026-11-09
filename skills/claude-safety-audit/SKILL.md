@@ -25,7 +25,7 @@ node audit.mjs --fix --apply            # apply them (every touched file is back
 
 ## Fixes it can apply
 - Remove allow rules that contain secrets (Claude will ask again next time, which is the point).
-- Add deny rules for catastrophic commands to `~/.claude/settings.json`: `rm -rf ~` and `/`, `git push --force`, `git reset --hard`, `git clean -fdx`, `mkfs`, `dd`, `diskpart`, plus reading `.env`, `~/.ssh` and `~/.aws`.
+- Add deny rules for catastrophic commands to `~/.claude/settings.json`: `rm -rf ~` and `/`, `git push --force`, `git reset --hard`, `git clean -fdx`, `mkfs`, `dd`, `diskpart`, plus `Read(.env)` / `Read(.env.*)` (bare names match at any depth), `~/.ssh` and `~/.aws`. Per the Claude Code permissions docs, `:*` and a trailing ` *` are equivalent, and deny rules apply to every part of a compound command. But Bash rules are not a security boundary (`sh -c` or a full path gets around them), which is why `bash-checkpoint` exists.
 - Add `.claude/settings.local.json` to `.gitignore`, and `git rm --cached` it if tracked (the local file stays).
 
 ## What you must tell the user

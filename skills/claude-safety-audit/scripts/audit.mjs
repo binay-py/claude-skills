@@ -37,10 +37,10 @@ const SECRETS = [
 ];
 const findSecret = s => { for (const [re, what] of SECRETS) { const m = s.match(re); if (m) return { what, sample: m[0].slice(0, 6) + '…' }; } return null; };
 const DANGEROUS_ALLOW = [
-  [/^Bash(\(\*\)|\(:\*\))?$/, 'allows EVERY shell command without asking'],
+  [/^Bash(\(\*\)|\(:\*\)|\( \*\))?$/, 'allows EVERY shell command without asking'],
   [/^Bash\((sudo|doas)\b/, 'allows sudo'],
   [/^Bash\(rm\b(?!.*node_modules|.*dist|.*build)/, 'allows rm without asking'],
-  [/^Bash\(.*git push.*(--force|-f\b)/, 'allows force-push'], [/^Bash\(git push:\*\)/, 'allows any git push (including --force)'],
+  [/^Bash\(.*git push.*(--force|-f\b)/, 'allows force-push'], [/^Bash\(git push( \*|:\*)\)/, 'allows any git push (including --force)'],
   [/^Bash\(.*git (reset --hard|clean -[a-z]*f)/, 'allows discarding uncommitted work'],
   [/^Bash\((curl|wget|iwr|irm)\b.*\|\s*(ba|z)?sh/, 'allows piping downloads into a shell'],
   [/^Bash\((chmod|chown) -R/, 'allows recursive permission changes'],
@@ -53,7 +53,7 @@ const RECOMMENDED_DENY = [
   'Bash(rm -rf /:*)', 'Bash(rm -rf ~:*)', 'Bash(rm -rf $HOME:*)', 'Bash(rm -rf /*:*)', 'Bash(sudo rm:*)',
   'Bash(git push --force:*)', 'Bash(git push -f:*)', 'Bash(git reset --hard:*)', 'Bash(git clean -fdx:*)',
   'Bash(mkfs:*)', 'Bash(dd if=:*)', 'Bash(chmod -R 777 /:*)', 'Bash(diskpart:*)', 'Bash(format:*)',
-  'Read(./.env)', 'Read(./.env.*)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)',
+  'Read(.env)', 'Read(.env.*)', 'Read(~/.ssh/**)', 'Read(~/.aws/**)', // bare names match at any depth (gitignore rules)
 ];
 
 const findings = []; // {sev, where, msg, fix?}
@@ -92,7 +92,7 @@ function auditMcp(file) {
 function auditRepoFile(repo, rel, hasSecret) {
   const tracked = git(repo, 'ls-files', '--error-unmatch', rel).status === 0;
   const ignored = git(repo, 'check-ignore', '-q', rel).status === 0;
-  const history = git(repo, 'log', '--all', '--format=%h %ad', '--date=short', '--', rel).stdout.trim().split('\n').filter(Boolean);
+  const history = git(repo, 'log', '--all', '--full-history', '--format=%h %ad', '--date=short', '--', rel).stdout.trim().split('\n').filter(Boolean);
   const remote = git(repo, 'remote', 'get-url', 'origin').stdout.trim();
   const where = short(path.join(repo, rel));
   if (tracked) add(hasSecret ? 'high' : 'medium', where, `is committed to git${remote ? ` (remote: ${remote.replace(/\/\/[^@]+@/, '//')})` : ''}${hasSecret ? ' AND contains a secret: rotate that key now, removing the file does not remove it from history' : ''}`,

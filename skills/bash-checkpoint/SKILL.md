@@ -39,6 +39,7 @@ node checkpoint.mjs restore <id>       # put everything back
 node checkpoint.mjs restore <id> src/  # just one path
 node checkpoint.mjs prune --keep 50
 node checkpoint.mjs test "rm -rf ~"    # see what the rules would do
+node tests/run.mjs                    # 37 rule test cases (block / ask / snapshot / none)
 ```
 Restoring brings back deleted and modified files and leaves files created after the snapshot alone.
 
