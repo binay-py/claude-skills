@@ -162,6 +162,10 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 
 Bug reports and pull requests are welcome. Every push is tested on Windows, macOS and Linux. See [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules and how to run the tests.
 
+## Community
+
+Share what you build with these skills, ask questions, or post your best AI fails in [r/totla](https://www.reddit.com/r/totla/), a subreddit for people building with AI coding tools.
+
 ## License
 
 [MIT](LICENSE) © 2026 Binay Bhandari
