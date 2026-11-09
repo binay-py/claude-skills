@@ -1,14 +1,22 @@
 {
   "name": "binay-skills",
-  "owner": { "name": "Binay Bhandari" },
-  "metadata": { "description": "Practical Claude Code skills: drive your real browser with one connection, and turn event footage into recap videos." },
+  "owner": {
+    "name": "Binay Bhandari"
+  },
+  "metadata": {
+    "description": "Practical Claude Code skills: drive your real browser with one connection, and turn event footage into recap videos."
+  },
   "plugins": [
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "brave-cdp (one-connection browser automation for Brave/Chrome/Edge) and event-recap-video (ffmpeg recap + beat-synced reels).",
-      "version": "0.1.0",
-      "skills": ["./skills/brave-cdp", "./skills/event-recap-video"]
+      "description": "brave-cdp (one-connection browser automation), cf-pages-deploy (safe, verified Cloudflare Pages deploys) and event-recap-video (ffmpeg recaps + beat-synced reels).",
+      "version": "0.2.0",
+      "skills": [
+        "./skills/brave-cdp",
+        "./skills/cf-pages-deploy",
+        "./skills/event-recap-video"
+      ]
     }
   ]
 }
