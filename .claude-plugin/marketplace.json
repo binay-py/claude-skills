@@ -10,12 +10,13 @@
     {
       "name": "binay-skills",
       "source": "./",
-      "description": "brave-cdp (one-connection browser automation), cf-pages-deploy (safe, verified Cloudflare Pages deploys) and event-recap-video (ffmpeg recaps + beat-synced reels).",
-      "version": "0.2.0",
+      "description": "brave-cdp (one-connection browser automation), cf-pages-deploy (safe, verified Cloudflare Pages deploys), site-qa (headless crawl + prioritized QA report) and event-recap-video (ffmpeg recaps + beat-synced reels).",
+      "version": "0.3.0",
       "skills": [
         "./skills/brave-cdp",
         "./skills/cf-pages-deploy",
-        "./skills/event-recap-video"
+        "./skills/event-recap-video",
+        "./skills/site-qa"
       ]
     }
   ]

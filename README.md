@@ -9,6 +9,7 @@ Practical [Claude Code](https://claude.com/claude-code) skills I use every week.
 | **[brave-cdp](skills/brave-cdp)** | Lets Claude drive **your own logged-in Brave / Chrome / Edge** over the DevTools Protocol, using **one connection** so you click "Allow remote debugging?" once instead of 20 times. Zero dependencies, one file. |
 | **[cf-pages-deploy](skills/cf-pages-deploy)** | Deploys a static site to **Cloudflare Pages** without leaking `.env`/`node_modules`/keys: stages a clean copy, scans for secrets, deploys, then verifies the live file matches **byte for byte**. Handles the wrangler 4.15x `pages project create` change and suffixed `*.pages.dev` URLs. |
 | **[event-recap-video](skills/event-recap-video)** | Turns hundreds of phone photos and videos from an event (conference, trip, wedding) into a hooky recap: 16:9 main cut, 9:16 version, and a 45 s beat-synced reel. Pure ffmpeg + Python. |
+| **[site-qa](skills/site-qa)** | Crawls a site in headless Chrome and writes a **prioritized QA report**: JS errors, failed requests, broken images/links, mobile sideways-scroll, missing viewport/SEO/Open Graph tags, alt text, unlabeled inputs, page weight, plus desktop and mobile screenshots. Run it before handing a site to a client. |
 
 ## Install
 

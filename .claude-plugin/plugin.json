@@ -1,6 +1,6 @@
 {
   "name": "binay-skills",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "brave-cdp and event-recap-video skills for Claude Code.",
   "author": {
     "name": "Binay Bhandari"
@@ -15,6 +15,9 @@
     "video",
     "cloudflare",
     "cloudflare-pages",
-    "deploy"
+    "deploy",
+    "qa",
+    "seo",
+    "accessibility"
   ]
 }
