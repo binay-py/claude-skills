@@ -38,26 +38,42 @@ function findBrowser() {
 }
 
 // ---------- headless browser lifecycle ----------
-// On Windows, --headless=new still creates real (hidden) browser windows. A browser that outlives this
-// script leaves them piling up in Alt+Tab, titled after the pages it visited. So the browser is closed
-// over CDP, then its whole process tree is killed (also on Ctrl+C and crashes), and browsers that earlier
-// runs left behind when they were killed outright are closed on the next start.
+// On Windows, --headless=new still creates real (hidden) browser windows, and a browser that gets force-killed
+// leaves its pages stuck in Alt+Tab (blank entries titled after the pages, until Explorer restarts). Hidden
+// windows ignore a normal "taskkill" close, so the only clean way out is Browser.close over the DevTools
+// connection. Every exit path uses it and waits up to 15 s (Edge can take ~13 s): normal close, Ctrl+C, crashes
+// (via a short synchronous helper process), and browsers that earlier runs left behind when they were killed
+// outright (closed on the next start). A force-kill is only the last resort when the browser ignores that.
 const alivePid = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 const rmDir = dir => { try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch {} };
-function killTree(pid) {
+const GRACE_MS = 15000;
+// Run in a child process so it also works synchronously from the 'exit' handler: Browser.close, then wait for the pid.
+const CLOSER = `const [f, pid, ms] = process.argv.slice(1), t0 = Date.now();
+const alive = () => { if (!+pid) return Date.now() - t0 < 1500; try { process.kill(+pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+try { const [port, p] = require('fs').readFileSync(f, 'utf8').trim().split(/\\r?\\n/);
+  const ws = new WebSocket('ws://127.0.0.1:' + port + p); ws.onerror = () => {};
+  ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: 'Browser.close' })); } catch {}
+setInterval(() => { if (!alive() || Date.now() - t0 > +ms) process.exit(0); }, 150);`;
+// Watchdog, started detached next to the browser: if this script is killed outright (a timeout, a closed
+// terminal), Windows would otherwise force-kill the browser with it (Node's job object), which is exactly what
+// leaves the stuck Alt+Tab entries. The watchdog closes it cleanly instead, then exits.
+const GUARD = `const [f, parent, child] = process.argv.slice(1), cp = require('child_process');
+const alive = p => { try { process.kill(+p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const iv = setInterval(() => {
+  if (!alive(child)) process.exit(0);
+  if (alive(parent)) return;
+  clearInterval(iv);
+  cp.spawnSync(process.execPath, ['-e', ${JSON.stringify(CLOSER)}, f, child, '${GRACE_MS}'], { stdio: 'ignore', windowsHide: true });
+  try { if (alive(child)) process.platform === 'win32' ? cp.spawnSync('taskkill', ['/PID', child, '/T', '/F'], { stdio: 'ignore', windowsHide: true }) : process.kill(+child, 'SIGKILL'); } catch {}
+  process.exit(0);
+}, 500);`;
+function closeSync(dir, pid) {
+  try { spawnSync(process.execPath, ['-e', CLOSER, path.join(dir, 'DevToolsActivePort'), String(pid), String(GRACE_MS)], { stdio: 'ignore', windowsHide: true, timeout: GRACE_MS + 5000 }); } catch {}
+}
+function killTree(pid) { // last resort only
   try {
     if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
     else process.kill(pid, 'SIGKILL');
-  } catch {}
-}
-// Reaches only the exact browser instance that wrote this profile (the ws path is unique per instance).
-async function closeViaPortFile(dir) {
-  try {
-    const [port, wsPath] = fs.readFileSync(path.join(dir, 'DevToolsActivePort'), 'utf8').trim().split(/\r?\n/);
-    const ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}`);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; setTimeout(rej, 1500); });
-    ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-    await sleep(1000); ws.close();
   } catch {}
 }
 async function sweepStale(prefix) {
@@ -67,7 +83,10 @@ async function sweepStale(prefix) {
     let owner = null; try { owner = JSON.parse(fs.readFileSync(path.join(dir, 'owner.json'), 'utf8')); } catch {}
     let age = 0; try { age = Date.now() - fs.statSync(dir).mtimeMs; } catch { continue; }
     if (owner ? alivePid(owner.node) : age < 30 * 60e3) continue; // another run may still be using it
-    await closeViaPortFile(dir); rmDir(dir);
+    // Browser.close reaches only the exact instance that wrote this profile (the ws path is unique per instance);
+    // its pid is unknown here, so wait on the profile folder instead: it can be removed once the browser is gone.
+    closeSync(dir, '');
+    for (let t = 0; t < GRACE_MS && fs.existsSync(dir); t += 500) { rmDir(dir); if (fs.existsSync(dir)) await sleep(500); }
   }
 }
 // Throwaway headless browser. stop() is synchronous so it also works from the 'exit' handler.
@@ -76,13 +95,15 @@ async function startBrowser(prefix, args = []) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   fs.writeFileSync(path.join(profile, 'owner.json'), JSON.stringify({ node: process.pid }));
   const proc = spawn(findBrowser(), ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run',
-    '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars', '--mute-audio', ...args, 'about:blank'], { stdio: 'ignore', windowsHide: true });
+    '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars', '--mute-audio', ...args, 'about:blank'],
+    { stdio: 'ignore', windowsHide: true, detached: process.platform === 'win32' }); // detached: not killed along with this script (see GUARD)
   const running = () => proc.exitCode === null && proc.signalCode === null;
   const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
   let stopped = false;
   const stop = () => {
     if (stopped) return; stopped = true;
-    if (running()) killTree(proc.pid);
+    if (running() && alivePid(proc.pid)) closeSync(profile, proc.pid);
+    if (running() && alivePid(proc.pid)) killTree(proc.pid);
     rmDir(profile);
     process.off('exit', stop); for (const s of SIGNALS) process.off(s, onSignal);
   };
@@ -93,12 +114,13 @@ async function startBrowser(prefix, args = []) {
   if (!fs.existsSync(portFile)) { stop(); throw new Error('browser did not start'); }
   await sleep(200);
   const [port, wsPath] = fs.readFileSync(portFile, 'utf8').trim().split(/\r?\n/);
+  try { spawn(process.execPath, ['-e', GUARD, portFile, String(process.pid), String(proc.pid)], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch {}
   const waitExit = ms => Promise.race([running() ? new Promise(r => proc.once('exit', r)) : null, sleep(ms)]);
   // Graceful shutdown: Browser.close over the page's own connection, wait for the process to go, then make sure.
   const close = async (send, ws) => {
     try { await Promise.race([send('Browser.close'), sleep(1500)]); } catch {}
     try { ws.close(); } catch {}
-    await waitExit(3000); stop();
+    await waitExit(GRACE_MS); stop();
   };
   return { wsUrl: `ws://127.0.0.1:${port}${wsPath}`, close, stop };
 }

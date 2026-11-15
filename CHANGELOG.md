@@ -23,7 +23,7 @@ Every skill was re-tested against real repos, logs, sites and media; each one ha
 - **session-handoff:** finds the current session when the script path is quoted, survives API-error entries, and redacts before truncating.
 - **env-doctor:** understands Cloudflare Workers (`env.X`, `.dev.vars`, wrangler bindings).
 - **claude-md-doctor, mcp-audit, release-notes:** off-by-one line counts, auto memory from subfolders, real crash reasons for MCP servers, CRLF changelogs kept as CRLF.
-- **site-qa, visual-diff:** no more 30-second waits and false "slow" findings on pages with beacons or redirects; site-qa follows http→https and checks same-site file links. Headless browsers are always shut down, so they no longer pile up as hidden windows on Windows.
+- **site-qa, visual-diff:** no more 30-second waits and false "slow" findings on pages with beacons or redirects; site-qa follows http→https and checks same-site file links. On Windows, a force-killed headless Edge leaves blank entries stuck in Alt+Tab, so site-qa, visual-diff, gif-maker and pwa-check now always close the browser over DevTools and wait for it (Ctrl+C and crashes included). A small watchdog does the same when a run is killed outright, and the next run closes browsers left behind by older versions.
 - **cf-pages-deploy:** `.dev.vars` is never uploaded, every text file is scanned for secrets, and `--include` no longer pulls in `node_modules`.
 - **brave-cdp:** one relay token per port, `CDP_URL`/`CDP_BROWSER` respected while a relay runs, and tabs left by killed jobs are closed on the next run (`cleanup`).
 - **link-preview-check, readme-upgrade:** Git Bash paths, sitemap edge cases, bare links checked.
