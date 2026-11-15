@@ -1,6 +1,6 @@
 # claude-skills
 
-A collection of 23 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, repos, games and media.
+A collection of 26 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, PWAs, Chrome extensions, repos, games and media.
 
 [![tests](https://github.com/binay-py/claude-skills/actions/workflows/test.yml/badge.svg)](https://github.com/binay-py/claude-skills/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -15,7 +15,7 @@ A collection of 23 skills for [Claude Code](https://claude.com/claude-code). Som
 
 - [Installation](#installation)
 - [Enabling the hooks](#enabling-the-hooks)
-- [Skills](#skills): [Safety](#safety) · [Usage and cost](#usage-and-cost) · [Websites](#websites) · [Repositories and games](#repositories-and-games) · [Media](#media) · [Freelance and browser](#freelance-and-browser)
+- [Skills](#skills): [Safety](#safety) · [Usage and cost](#usage-and-cost) · [Websites](#websites) · [Repositories, games and extensions](#repositories-games-and-extensions) · [Media](#media) · [Freelance and browser](#freelance-and-browser)
 - [Examples](#examples)
 - [Design principles](#design-principles)
 - [Contributing](#contributing)
@@ -85,6 +85,7 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 | [package-guard](skills/package-guard) | Hook, CLI | Blocks packages that don't exist and asks about typosquats and very new packages before `npm install` or `pip install`. |
 | [secret-commit-guard](skills/secret-commit-guard) | Git hook | Pre-commit hook that blocks keys and tokens from being committed, plus working-tree and history scans. |
 | [claude-sandbox](skills/claude-sandbox) | CLI | Runs Claude Code in Docker with only the project folder mounted, as a non-root user with no capabilities. |
+| [cf-backup](skills/cf-backup) | CLI | Backs up Cloudflare D1 databases and KV namespaces to a local folder with checksums, a `verify` command and the exact restore commands. Never writes to Cloudflare. |
 
 ### Usage and cost
 
@@ -101,18 +102,20 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 | Skill | Type | Description |
 |---|---|---|
 | [site-qa](skills/site-qa) | CLI | Crawls a site and reports JS errors, broken links and images, mobile overflow, missing SEO and Open Graph tags, with screenshots. |
+| [pwa-check](skills/pwa-check) | CLI | Checks whether a web app installs as a PWA and really works offline: Chrome's own verdict plus manifest, icon and service-worker checks, with the fix for each. |
 | [link-preview-check](skills/link-preview-check) | CLI | Shows how a URL previews on WhatsApp, LinkedIn, X and Facebook, and flags missing or broken tags. |
 | [visual-diff](skills/visual-diff) | CLI | Before/after screenshots of a site with changed regions highlighted in an HTML report. |
 | [cf-pages-deploy](skills/cf-pages-deploy) | CLI | Deploys to Cloudflare Pages from a clean copy, scans for secrets, and verifies the live files. |
 | [env-doctor](skills/env-doctor) | CLI | Compares environment variables in code with `.env` files, including secrets exposed to the browser. |
 
-### Repositories and games
+### Repositories, games and extensions
 
 | Skill | Type | Description |
 |---|---|---|
 | [release-notes](skills/release-notes) | CLI | Release notes and CHANGELOG entries from git history, with links and a semver suggestion. |
 | [readme-upgrade](skills/readme-upgrade) | CLI | Audits a README's structure and links, and can run its commands in a temporary copy to verify them. |
 | [itch-html5-package](skills/itch-html5-package) | CLI | Checks an HTML5 game against itch.io's upload rules and builds the zip. |
+| [cws-extension-check](skills/cws-extension-check) | CLI | Checks a Chrome extension against the Chrome Web Store's rules (MV3 manifest, icons, exact-case files, remote code, unused permissions), builds a verified upload zip and drafts the permission justifications. |
 
 ### Media
 

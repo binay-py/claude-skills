@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Missing Files",
+  "description": "References files that are missing or differ in case.",
+  "version": "0.1.0",
+  "icons": { "128": "icons/icon128.png" },
+  "background": { "service_worker": "Background.js" },
+  "content_scripts": [{ "matches": ["https://example.org/*"], "js": ["content.js", "missing.js"], "css": ["styles/Content.css"] }],
+  "action": { "default_popup": "popup.html" },
+  "options_ui": { "page": "options.html" },
+  "side_panel": { "default_path": "panel.html" },
+  "declarative_net_request": { "rule_resources": [{ "id": "r1", "enabled": true, "path": "rules.json" }] },
+  "web_accessible_resources": [
+    { "resources": ["fonts/*"], "matches": ["https://example.org/*"] },
+    { "resources": ["content.js"] }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "manifest_version": 2,
+  "name": "Old Extension",
+  "description": "Still on Manifest V2.",
+  "version": "3.1",
+  "icons": { "128": "icons/icon128.png" },
+  "browser_action": { "default_popup": "popup.html" },
+  "background": { "scripts": ["bg.js"], "persistent": false }
+}

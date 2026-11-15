@@ -1,0 +1,1 @@
+# Weather Badge (test fixture)

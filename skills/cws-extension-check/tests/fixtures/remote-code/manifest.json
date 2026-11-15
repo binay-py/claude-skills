@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Remote Code",
+  "description": "Loads and runs code it should not.",
+  "version": "1.0.0",
+  "icons": { "128": "icon128.png" },
+  "permissions": ["storage"],
+  "background": { "service_worker": "sw.js" },
+  "content_scripts": [{ "matches": ["https://example.org/*"], "js": ["cs.js"] }],
+  "action": { "default_popup": "popup.html" },
+  "sandbox": { "pages": ["sandbox.html"] },
+  "content_security_policy": { "extension_pages": "script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net; object-src 'self'" }
+}

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Permission Hoarder",
+  "description": "Asks for more than it uses.",
+  "version": "1.0.0",
+  "icons": { "128": "icon128.png" },
+  "background": { "service_worker": "bg.js" },
+  "permissions": ["storage", "unlimitedStorage", "alarms", "tabs", "cookies", "activeTab", "history", "webRequestBlocking", "background"],
+  "optional_permissions": ["downloads"],
+  "host_permissions": ["<all_urls>", "https://api.unused-host.io/*", "http://localhost:3000/*"]
+}

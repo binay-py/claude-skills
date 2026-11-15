@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Super Ultimate Productivity Booster Toolkit for Tabs Windows Bookmarks and More",
+  "description": "This description is far too long for the Chrome Web Store, which only allows one hundred and thirty-two characters in the manifest field.",
+  "version": "1.02.0",
+  "key": "placeholder",
+  "update_url": "https://example.org/updates.xml",
+  "homepage_url": "https://example.com/booster",
+  "icons": { "48": "icons/icon48.png" },
+  "action": { "default_icon": "icons/missing.png" },
+  "background": { "scripts": ["bg.js"] },
+  "web_accessible_resources": ["a.txt"],
+  "content_security_policy": "script-src 'self'; object-src 'self'",
+  "permissions": ["storag", "https://*/*"],
+  "content_scripts": [{ "matches": ["https://google.com"], "js": ["bg.js"] }]
+}

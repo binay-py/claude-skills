@@ -6,3 +6,4 @@ node_modules/
 !docs/*.png
 *.mp4
 !docs/*.mp4
+!skills/*/tests/fixtures/**/*.png

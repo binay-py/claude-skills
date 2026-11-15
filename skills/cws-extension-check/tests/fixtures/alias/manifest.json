@@ -1,0 +1,2 @@
+{ "manifest_version": 3, "name": "Aliased API", "description": "Calls chrome through an alias.", "version": "1.0.0",
+  "icons": { "128": "icon128.png" }, "background": { "service_worker": "bg.js" }, "permissions": ["alarms", "storage"] }

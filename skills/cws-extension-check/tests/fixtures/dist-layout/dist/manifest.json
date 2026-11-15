@@ -1,0 +1,2 @@
+{ "manifest_version": 3, "name": "Built Thing", "description": "Source manifest; the build goes to dist/.", "version": "1.9.0",
+  "icons": { "128": "icon128.png" }, "background": { "service_worker": "background.js" } }

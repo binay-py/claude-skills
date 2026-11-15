@@ -66,6 +66,15 @@ jobs:
           git config --global user.name "ci"
           node skills/secret-commit-guard/tests/run.mjs
 
+      - name: cws-extension-check
+        run: node skills/cws-extension-check/tests/run.mjs
+
+      - name: cf-backup (offline, mock API)
+        run: node skills/cf-backup/tests/run.mjs
+
+      - name: pwa-check (fixtures, headless Chrome)
+        run: node skills/pwa-check/tests/run.mjs
+
       - name: README links and anchors
         run: node skills/readme-upgrade/scripts/readme-check.mjs . --offline
 
