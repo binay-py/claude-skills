@@ -6,6 +6,7 @@
 //   node cdp.mjs tabs                         list open page tabs
 //   node cdp.mjs eval "document.title" [--match <url-part>]
 //   node cdp.mjs run job.mjs [args...]        run a whole job on one connection
+//   node cdp.mjs cleanup                      close tabs left open by jobs that were killed
 //   node cdp.mjs relay                        keep one connection open for later commands
 //
 // Every command uses a running relay when there is one, otherwise connects directly.
@@ -152,6 +153,24 @@ export async function tabs(cdp) {
   return targetInfos.filter(t => t.type === 'page' && !t.url.startsWith('devtools://'));
 }
 
+// Ledger of tabs that jobs opened, with the job's PID. A job that is killed outright (timeout, closed
+// terminal) can't close its tabs, so the next run closes those whose job is gone. The user's own tabs
+// are never in the ledger, and tabs of a job that is still running are left alone.
+const LEDGER = path.join(os.homedir(), '.cdp-opened.json');
+const readLedger = () => { try { return JSON.parse(fs.readFileSync(LEDGER, 'utf8')); } catch { return []; } };
+const writeLedger = l => { try { l.length ? fs.writeFileSync(LEDGER, JSON.stringify(l)) : fs.rmSync(LEDGER, { force: true }); } catch {} };
+const alivePid = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+export async function closeLeftovers(cdp) {
+  const stale = readLedger().filter(e => !alivePid(e.pid));
+  if (!stale.length) return 0;
+  const open = new Set((await tabs(cdp)).map(t => t.targetId));
+  let n = 0;
+  for (const e of stale) if (open.has(e.targetId)) { await cdp.send('Target.closeTarget', { targetId: e.targetId }).catch(() => {}); n++; }
+  const ids = new Set(stale.map(e => e.targetId));
+  writeLedger(readLedger().filter(e => !ids.has(e.targetId)));
+  return n;
+}
+
 const KEYS = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowDown: 40, ArrowUp: 38, ArrowLeft: 37, ArrowRight: 39 };
 
 // Attach to a tab. Default: open a NEW tab so the user's own tabs are never disturbed.
@@ -159,7 +178,10 @@ const KEYS = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowDown: 40, Arrow
 export async function page(cdp, { url = 'about:blank', match } = {}) {
   let target = match && (await tabs(cdp)).find(t => t.url.includes(match));
   let created = false;
-  if (!target) { target = { targetId: (await cdp.send('Target.createTarget', { url })).targetId }; created = true; }
+  if (!target) {
+    target = { targetId: (await cdp.send('Target.createTarget', { url })).targetId }; created = true;
+    writeLedger([...readLedger(), { targetId: target.targetId, pid: process.pid }]);
+  }
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
   const send = (m, p) => cdp.send(m, p, sessionId);
 
@@ -215,7 +237,11 @@ export async function page(cdp, { url = 'about:blank', match } = {}) {
       if (!nodeId) throw new Error('no element: ' + selector);
       await send('DOM.setFileInputFiles', { nodeId, files: files.map(f => path.resolve(f)) });
     },
-    close: () => created ? cdp.send('Target.closeTarget', { targetId: target.targetId }) : cdp.send('Target.detachFromTarget', { sessionId }),
+    async close() {
+      if (!created) return cdp.send('Target.detachFromTarget', { sessionId });
+      try { await cdp.send('Target.closeTarget', { targetId: target.targetId }); }
+      finally { writeLedger(readLedger().filter(e => e.targetId !== target.targetId)); }
+    },
   };
   if (url !== 'about:blank' && created) await p.waitFor(`location.href !== 'about:blank' && document.readyState === 'complete'`, 45000);
   return p;
@@ -270,11 +296,13 @@ async function relay() {
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   if (cmd === 'relay') return relay();
-  if (!['tabs', 'eval', 'run'].includes(cmd)) {
-    console.log('usage: node cdp.mjs tabs | eval "<js>" [--match <url-part>] | run job.mjs [args...] | relay'); process.exit(1);
+  if (!['tabs', 'eval', 'run', 'cleanup'].includes(cmd)) {
+    console.log('usage: node cdp.mjs tabs | eval "<js>" [--match <url-part>] | run job.mjs [args...] | cleanup | relay'); process.exit(1);
   }
   const cdp = await connect();
   try {
+    const left = await closeLeftovers(cdp).catch(() => 0);
+    if (left || cmd === 'cleanup') console.log(`closed ${left} tab(s) left open by earlier jobs`);
     if (cmd === 'tabs') for (const t of await tabs(cdp)) console.log(`${t.targetId}  ${t.title.slice(0, 60)}  ${t.url}`);
     if (cmd === 'eval') {
       const mi = rest.indexOf('--match'); const match = mi >= 0 ? rest[mi + 1] : undefined;
@@ -287,6 +315,9 @@ async function main() {
       const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a);
       const opened = []; // tabs the job opens are closed afterwards, even if it throws
       const openPage = async o => { const pg = await page(cdp, o); opened.push(pg); return pg; };
+      // Ctrl+C / terminate: close this job's tabs before exiting (a hard kill is handled by the ledger next run).
+      const onSignal = async () => { for (const pg of opened) await pg.close().catch(() => {}); cdp.close(); process.exit(130); };
+      for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(s, onSignal);
       try {
         await job.default({ cdp, page: openPage, tabs: () => tabs(cdp), waitEvent: (m, o) => waitEvent(cdp, m, o), downloadsTo: d => downloadsTo(cdp, d), log, args: rest.slice(1) });
       } finally {

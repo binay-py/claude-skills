@@ -7,7 +7,7 @@
 //   node visual-diff.mjs run <url> [/paths] --baseline shots/baseline [--full] [--hide ...]
 //
 // compare/run exit with code 1 when any page changed more than --threshold percent (or a page is missing).
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -53,17 +53,75 @@ function findBrowser() {
   return f;
 }
 
-async function launch() {
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-diff-'));
+// ---------- headless browser lifecycle ----------
+// On Windows, --headless=new still creates real (hidden) browser windows. A browser that outlives this
+// script leaves them piling up in Alt+Tab, titled after the pages it visited. So the browser is closed
+// over CDP, then its whole process tree is killed (also on Ctrl+C and crashes), and browsers that earlier
+// runs left behind when they were killed outright are closed on the next start.
+const alivePid = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const rmDir = dir => { try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch {} };
+function killTree(pid) {
+  try {
+    if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    else process.kill(pid, 'SIGKILL');
+  } catch {}
+}
+// Reaches only the exact browser instance that wrote this profile (the ws path is unique per instance).
+async function closeViaPortFile(dir) {
+  try {
+    const [port, wsPath] = fs.readFileSync(path.join(dir, 'DevToolsActivePort'), 'utf8').trim().split(/\r?\n/);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}`);
+    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; setTimeout(rej, 1500); });
+    ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+    await sleep(1000); ws.close();
+  } catch {}
+}
+async function sweepStale(prefix) {
+  let names = []; try { names = fs.readdirSync(os.tmpdir()).filter(n => n.startsWith(prefix)); } catch {}
+  for (const n of names) {
+    const dir = path.join(os.tmpdir(), n);
+    let owner = null; try { owner = JSON.parse(fs.readFileSync(path.join(dir, 'owner.json'), 'utf8')); } catch {}
+    let age = 0; try { age = Date.now() - fs.statSync(dir).mtimeMs; } catch { continue; }
+    if (owner ? alivePid(owner.node) : age < 30 * 60e3) continue; // another run may still be using it
+    await closeViaPortFile(dir); rmDir(dir);
+  }
+}
+// Throwaway headless browser. stop() is synchronous so it also works from the 'exit' handler.
+async function startBrowser(prefix, args = []) {
+  await sweepStale(prefix);
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.writeFileSync(path.join(profile, 'owner.json'), JSON.stringify({ node: process.pid }));
   const proc = spawn(findBrowser(), ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run',
-    '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars', '--mute-audio', '--force-color-profile=srgb',
-    '--font-render-hinting=none', '--disable-features=PaintHolding', 'about:blank'], { stdio: 'ignore' });
+    '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars', '--mute-audio', ...args, 'about:blank'], { stdio: 'ignore', windowsHide: true });
+  const running = () => proc.exitCode === null && proc.signalCode === null;
+  const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return; stopped = true;
+    if (running()) killTree(proc.pid);
+    rmDir(profile);
+    process.off('exit', stop); for (const s of SIGNALS) process.off(s, onSignal);
+  };
+  const onSignal = () => { stop(); process.exit(130); };
+  process.on('exit', stop); for (const s of SIGNALS) process.on(s, onSignal);
   const portFile = path.join(profile, 'DevToolsActivePort');
-  for (let i = 0; i < 100 && !fs.existsSync(portFile); i++) await sleep(100);
-  if (!fs.existsSync(portFile)) { proc.kill(); throw new Error('browser did not start'); }
+  for (let i = 0; i < 100 && !fs.existsSync(portFile) && running(); i++) await sleep(100);
+  if (!fs.existsSync(portFile)) { stop(); throw new Error('browser did not start'); }
   await sleep(200);
   const [port, wsPath] = fs.readFileSync(portFile, 'utf8').trim().split(/\r?\n/);
-  const ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}`);
+  const waitExit = ms => Promise.race([running() ? new Promise(r => proc.once('exit', r)) : null, sleep(ms)]);
+  // Graceful shutdown: Browser.close over the page's own connection, wait for the process to go, then make sure.
+  const close = async (send, ws) => {
+    try { await Promise.race([send('Browser.close'), sleep(1500)]); } catch {}
+    try { ws.close(); } catch {}
+    await waitExit(3000); stop();
+  };
+  return { wsUrl: `ws://127.0.0.1:${port}${wsPath}`, close, stop };
+}
+
+async function launch() {
+  const br = await startBrowser('visual-diff-', ['--force-color-profile=srgb', '--font-render-hinting=none', '--disable-features=PaintHolding']);
+  const ws = new WebSocket(br.wsUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('could not connect to browser')); });
   let id = 0; const pending = new Map(), listeners = new Set();
   ws.onmessage = e => {
@@ -72,13 +130,7 @@ async function launch() {
     else if (m.method) for (const l of listeners) l(m);
   };
   const send = (method, params = {}, sessionId) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
-  const close = async () => {
-    try { await Promise.race([send('Browser.close'), sleep(1500)]); } catch {}
-    try { ws.close(); } catch {}
-    try { proc.kill(); } catch {}
-    await sleep(500);
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch {}
-  };
+  const close = () => br.close(send, ws);
   return { send, on: f => (listeners.add(f), () => listeners.delete(f)), close };
 }
 

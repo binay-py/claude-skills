@@ -22,6 +22,7 @@ Modern Chromium browsers (Brave, Chrome 144+, Edge) show an **"Allow remote debu
 node cdp.mjs tabs                              # list open tabs
 node cdp.mjs eval "document.title" --match github.com
 node cdp.mjs run job.mjs [args...]             # whole task, one connection
+node cdp.mjs cleanup                           # close tabs left by jobs that were killed
 node cdp.mjs relay                             # optional: keep one connection open
 ```
 
@@ -42,6 +43,10 @@ export default async function ({ page, tabs, waitEvent, downloadsTo, cdp, log, a
 - `p.send(method, params)` sends any raw CDP command to that tab; `cdp.send(...)` sends browser-level ones.
 - Events: `await p.send('Page.enable')`, then `await waitEvent('Page.loadEventFired', { sessionId: p.sessionId })`. Events also work through the relay.
 - Downloads: `await downloadsTo('out')`. Files arrive named by GUID with no extension. Wait for `Browser.downloadProgress` with `state: 'completed'`, then rename.
+
+## Tab cleanup
+- `run` closes every tab the job opened when it finishes, throws, or gets Ctrl+C.
+- Tabs a job opens are also recorded in `~/.cdp-opened.json` with the job's PID. If the job is killed outright (timeout, closed terminal), the next `tabs`/`eval`/`run`/`cleanup` closes those tabs. Tabs of jobs still running, and the user's own tabs, are never touched.
 
 ## Gotchas
 - Synthetic `el.click()` doesn't open file choosers, menus, or some React handlers. Use `p.click()` (real mouse events) or `p.upload()`.
