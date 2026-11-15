@@ -24,7 +24,7 @@ const MAX_MB = Number(opt('max-mb', 5)), LOOP = opt('loop', '0');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const die = m => { console.error('✘ ' + m); process.exit(1); };
 const ff = (args, label) => { const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { encoding: 'utf8', maxBuffer: 64 << 20 }); if (r.status) die(`ffmpeg failed (${label}): ${(r.stderr || '').trim().split('\n').slice(-3).join(' | ')}`); };
-const probe = f => { const r = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate,nb_frames:format=duration', '-of', 'json', f], { encoding: 'utf8' }); try { return JSON.parse(r.stdout); } catch { return null; } };
+const probe = f => { const r = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate,nb_frames:stream_side_data=rotation:format=duration', '-of', 'json', f], { encoding: 'utf8' }); try { return JSON.parse(r.stdout); } catch { return null; } };
 if (spawnSync('ffmpeg', ['-version']).status !== 0) die('ffmpeg not found on PATH (install it: winget install ffmpeg / brew install ffmpeg / apt install ffmpeg)');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'gif-maker-'));
 process.on('exit', () => { if (!flag('keep')) fs.rmSync(work, { recursive: true, force: true }); else console.log('frames kept in ' + work); });
@@ -49,7 +49,7 @@ function encode({ inputArgs, chain = '', fps, width, colors = Number(opt('colors
     console.log(`  ${(size / 1048576).toFixed(2)} MB > ${MAX_MB} MB: retrying at ${fps || 'src'} fps, ${colors} colors, ${width || 'src'} px`);
     size = attempt(fps, width, colors);
   }
-  if (flag('mp4')) ff([...inputArgs, '-vf', [chain, fps ? `fps=${fps}` : '', width ? `scale=${width}:-2:flags=lanczos` : 'scale=trunc(iw/2)*2:trunc(ih/2)*2'].filter(Boolean).join(','), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', OUT.replace(/\.gif$/i, '') + '.mp4'], 'mp4');
+  if (flag('mp4')) ff([...inputArgs, '-vf', [chain, fps ? `fps=${fps}` : '', width ? `scale=${width}:-2:flags=lanczos` : 'scale=trunc(iw/2)*2:trunc(ih/2)*2'].filter(Boolean).join(','), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-an', '-movflags', '+faststart', OUT.replace(/\.gif$/i, '') + '.mp4'], 'mp4');
   if (flag('webp')) ff([...inputArgs, '-vf', [chain, fps ? `fps=${fps}` : '', width ? `scale=${width}:-2:flags=lanczos` : ''].filter(Boolean).join(',') || 'null', '-c:v', 'libwebp', '-lossless', '0', '-q:v', '75', '-loop', LOOP === '-1' ? '1' : '0', '-an', OUT.replace(/\.gif$/i, '') + '.webp'], 'webp');
   const p = probe(OUT), st = p?.streams?.[0] || {};
   console.log(`✓ ${OUT}  ${st.width}x${st.height} · ${(size / 1048576).toFixed(2)} MB · ${fps || 'src'} fps · ${colors} colors${size > limit ? `  (still over ${MAX_MB} MB: shorten it or lower --width)` : ''}`);
@@ -156,7 +156,10 @@ async function recordPage(url, { width, height, fps, dur, scale = 1 }) {
     ws = new WebSocket(br.wsUrl); await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
     let id = 0; const pending = new Map();
     ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); } };
-    send = (method, params = {}, sessionId) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
+    // if the browser dies mid-recording, fail with a message instead of hanging on a reply that never comes
+    let lost = null;
+    ws.onclose = () => { lost = new Error('lost the connection to the browser (did it crash?)'); for (const { rej } of pending.values()) rej(lost); pending.clear(); };
+    send = (method, params = {}, sessionId) => { if (lost) return Promise.reject(lost); const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     const s = (m, p) => send(m, p, sessionId);
@@ -187,7 +190,8 @@ const framesInput = fps => ['-framerate', String(fps), '-i', path.join(work, 'f%
 function terminalHtml(src, theme) {
   const T = theme === 'light' ? { bg: '#dcdcdc', win: '#ffffff', fg: '#1f2328', dim: '#6e7781', green: '#1a7f37', red: '#cf222e', yellow: '#9a6700', blue: '#0969da', bar: '#ececec', shadow: '0 2px 8px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.12)' }
     : { bg: '#0d1117', win: '#161b22', fg: '#e6edf3', dim: '#8b949e', green: '#3fb950', red: '#ff7b72', yellow: '#d29922', blue: '#79c0ff', bar: '#21262d', shadow: '0 18px 50px rgba(0,0,0,.45),0 0 0 1px rgba(127,127,127,.18)' };
-  const lines = src.replace(/\r/g, '').split('\n');
+  // strip a UTF-8 BOM (Notepad / PowerShell 5 write one; it hid "@title" on line 1) and the final newline
+  const lines = src.replace(/^\uFEFF/, '').replace(/\r/g, '').replace(/\n$/, '').split('\n');
   const ev = []; let t = 400, speed = 38, title = '', prompt = '$';
   for (const raw of lines) {
     if (/^@title\s+/.test(raw)) { title = raw.replace(/^@title\s+/, ''); continue; }
@@ -261,16 +265,27 @@ const main = async () => {
     if (opt('crop')) parts.push(`crop=${opt('crop')}`);
     if (speed !== 1) parts.push(`setpts=PTS/${speed}`);
     if (opt('text')) {
-      const font = ['C:/Windows/Fonts/seguibl.ttf', 'C:/Windows/Fonts/arialbd.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'].find(f => fs.existsSync(f));
-      const tf = path.join(work, 'caption.txt'); fs.writeFileSync(tf, opt('text'));
+      // drawtext has no font fallback: emoji always draw as boxes, and Devanagari needs a font that has it
+      let text = opt('text');
+      const noEmoji = text.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
+      if (noEmoji !== text.trim()) { console.log('  note: emoji removed from --text (ffmpeg draws them as boxes; use html mode for emoji)'); text = noEmoji; }
+      const deva = /[\u0900-\u097F]/.test(text) ? ['C:/Windows/Fonts/mangalb.ttf', 'C:/Windows/Fonts/Nirmala.ttc', '/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc', '/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf', '/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf', '/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf'] : [];
+      const font = [...deva, 'C:/Windows/Fonts/seguibl.ttf', 'C:/Windows/Fonts/arialbd.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'].find(f => fs.existsSync(f));
+      const tf = path.join(work, 'caption.txt'); fs.writeFileSync(tf, text);
       const e = p => p.replace(/\\/g, '/').replace(/:/g, '\\:');
-      const vh = Number(probe(src)?.streams?.[0]?.height) || 720, ch = opt('crop') ? Number(opt('crop').split(':')[1]) || vh : vh;
-      parts.push(`drawtext=${font ? `fontfile='${e(font)}':` : ''}textfile='${e(tf)}':fontcolor=white:fontsize=h/11:borderw=${Math.max(2, Math.round(ch / 90))}:bordercolor=black@0.85:x=(w-text_w)/2:y=h-text_h-h/14`);
+      // size from the frame drawtext sees: displayed (rotation-aware) size, or the crop
+      const st = probe(src)?.streams?.[0] || {}, turned = Math.abs(Number(st.side_data_list?.[0]?.rotation) || 0) % 180 === 90;
+      const vw = Number(turned ? st.height : st.width) || 1280, vh = Number(turned ? st.width : st.height) || 720;
+      const c = opt('crop') ? opt('crop').split(':') : [], cw = Number(c[0]) || vw, ch = Number(c[1]) || vh;
+      // h/11, but long captions shrink to fit the width (they ran off both edges of portrait clips)
+      const fsz = Math.round(Math.min(ch / 11, 1.4 * cw / Math.max(1, [...text].length)));
+      parts.push(`drawtext=${font ? `fontfile='${e(font)}':` : ''}textfile='${e(tf)}':fontcolor=white:fontsize=${fsz}:borderw=${Math.max(2, Math.round(fsz / 8))}:bordercolor=black@0.85:x=(w-text_w)/2:y=h-text_h-h/14`);
     }
     return encode({ inputArgs, chain: parts.join(','), fps, width });
   }
   if (mode === 'images') {
-    const imgs = positional.filter(f => fs.existsSync(f)); if (imgs.length < 1) die('give one or more image files');
+    const missing = positional.filter(f => !fs.existsSync(f)); if (missing.length) die('image not found: ' + missing.join(', '));
+    const imgs = positional; if (imgs.length < 1) die('give one or more image files');
     const [W, H] = parseSize(opt('size'), '1000x600'), hold = Number(opt('hold', 1.6)), fade = Math.min(Number(opt('fade', 0.4)), hold / 2), fps = Number(opt('fps', 20));
     const bg = opt('bg', 'black');
     const inputs = imgs.flatMap(f => ['-loop', '1', '-t', String(hold + fade), '-i', path.resolve(f)]);

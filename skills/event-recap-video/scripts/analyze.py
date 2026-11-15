@@ -19,7 +19,7 @@ pillow_heif.register_heif_opener()
 ROOT = Path(__file__).resolve().parent
 RAW, WORK = ROOT / "raw", ROOT / "work"
 THUMBS, SHEETS = WORK / "thumbs", WORK / "sheets"
-LOCAL_TZ = dt.timezone(dt.timedelta(hours=5, minutes=45))  # Nepal time, used for video UTC timestamps
+LOCAL_TZ = None  # video UTC timestamps -> this computer's time zone; if the event was elsewhere, e.g. dt.timezone(dt.timedelta(hours=5, minutes=45))
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"}
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".3gp", ".mkv", ".webm"}
 
@@ -146,7 +146,7 @@ def mark_duplicates(recs):
 
 
 def contact_sheets(recs):
-    font = ImageFont.truetype(font("sans_bold"), 18)
+    fnt = ImageFont.truetype(font("sans_bold"), 18)  # not "font": that would shadow fonts.font
     days = {}
     for r in recs:
         days.setdefault(r["time"][:10], []).append(r)
@@ -167,8 +167,8 @@ def contact_sheets(recs):
                 if r["flags"]:
                     label += " " + ",".join(f[:3] for f in r["flags"])
                 d.rectangle([x, y, x + cw, y + 24], fill=(0, 0, 0))
-                d.text((x + 4, y + 2), label, fill=(255, 80, 80) if r["flags"] else (255, 255, 255), font=font)
-                d.text((x + 4, y + ch - 22), r["time"][11:16], fill=(255, 255, 0), font=font)
+                d.text((x + 4, y + 2), label, fill=(255, 80, 80) if r["flags"] else (255, 255, 255), font=fnt)
+                d.text((x + 4, y + ch - 22), r["time"][11:16], fill=(255, 255, 0), font=fnt)
             sheet.save(SHEETS / f"{day}_{part // 64}.jpg", quality=82)
 
 

@@ -23,7 +23,7 @@ Capture options:
 - `--full` full-page screenshot (page is scrolled first so lazy images load; capped at 16000 px tall). Without it, only the first screen.
 - `--hide ".clock, .ad-slot, canvas"` hides dynamic regions (`visibility:hidden`, so layout does not move).
 - `--wait 1500` extra ms after the page is quiet (default 500). `--viewports desktop` or `mobile` to do only one.
-- Paths like `/about` resolve against the first URL. In Git Bash, `/about` is rewritten by MSYS; the script undoes that, or write `about` without the slash.
+- Paths like `/about` resolve against the first URL. In Git Bash, `/about` is rewritten by MSYS; the script undoes that (a one-letter path like `/p` comes back as `/p/`), or write `about` without the slash.
 
 Compare options: `--threshold 0.5` (% of pixels, per screenshot) and `--tolerance 16` (per-channel 0-255 difference ignored, to skip antialiasing noise).
 

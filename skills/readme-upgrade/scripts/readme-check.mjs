@@ -138,6 +138,12 @@ for (let i = 0; i < textNoCode.length; i++) {
   for (const m of l.matchAll(/(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(\s*<?([^\s)>]+)>?(?:\s+["'(][^)]*["')])?\s*\)/g)) links.push({ url: m[3], line: i + 1, image: m[1] === '!', inner: m[2] });
   for (const m of l.matchAll(/^\s{0,3}\[([^\]]+)\]:\s*<?(\S+?)>?(?:\s+["'(].*)?$/g)) links.push({ url: m[2], line: i + 1, image: false, ref: m[1] });
   for (const m of l.matchAll(/<(a|img|source)\s[^>]*?(href|src|srcset)=["']([^"']+)["']/gi)) links.push({ url: m[3].split(/\s/)[0], line: i + 1, image: m[1].toLowerCase() !== 'a' });
+  // bare URLs and <https://…> autolinks: GitHub renders both as links
+  const bare = l.replace(/(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\([^)]*\)/g, ' ').replace(/^\s{0,3}\[[^\]]+\]:.*$/, ' ').replace(/<(https?:\/\/[^\s>]+)>/gi, ' $1 ').replace(/<[^>]*>/g, ' ');
+  for (const m of bare.matchAll(/https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?*_~)]/gi)) {
+    let u = m[0]; if (u.split('(').length > u.split(')').length && bare[m.index + u.length] === ')') u += ')'; // wiki/Foo_(bar)
+    links.push({ url: u, line: i + 1, image: false });
+  }
 }
 // nested badge: [![x](img)](link) — the regex above caught the outer link; catch inner images too
 for (const L of [...links]) if (L.inner) for (const m of L.inner.matchAll(/!\[[^\]]*\]\(\s*<?([^\s)>]+)/g)) links.push({ url: m[1], line: L.line, image: true });
@@ -309,7 +315,9 @@ if (!opt.offline && remote.length) {
       const L = uniq[i++], u = L.url.replace(/#.*$/, ''), badge = L.image && isBadge(u), host = new URL(u).hostname;
       const r = await probe(u); netStats.checked++;
       const what = badge ? 'badge' : L.image ? 'image' : 'link';
+      const signedIn = r.status === 404 && /^https:\/\/github\.com\/[^/]+\/[^/]+\/(stargazers|watchers)\/?$/i.test(u); // GitHub 404s these when logged out
       if (r.error) { netStats.broken++; add('medium', `${what} ${u} — ${r.error}`, L.line); }
+      else if (signedIn) { netStats.unverified++; add('info', `${what} ${u} — HTTP 404 to logged-out requests (GitHub shows this page only when signed in), unverified`, L.line); }
       else if (r.status === 429 || r.status === 999 || ((r.status === 403 || r.status === 401) && BOT_BLOCKERS.test(host))) { netStats.unverified++; add('info', `${what} ${u} — HTTP ${r.status}, unverified (this site blocks scripts; open it in a browser)`, L.line); }
       else if (r.status >= 400) { netStats.broken++; add(r.status === 404 || r.status === 410 ? 'high' : 'medium', `${what} ${u} — HTTP ${r.status}${r.status === 403 ? ' (may be bot blocking: check in a browser)' : r.status >= 500 ? ' (server error, may be temporary: recheck later)' : ''}`, L.line); }
       else if ((badge || L.image) && r.type && !/^image\/|octet-stream/.test(r.type)) { netStats.broken++; add('medium', `${what} ${u} returns ${r.type.split(';')[0]}, not an image`, L.line); }

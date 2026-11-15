@@ -15,7 +15,7 @@ Modern Chromium browsers (Brave, Chrome 144+, Edge) show an **"Allow remote debu
 ## Setup (user does this once)
 - Brave: open `brave://inspect/#remote-debugging` and turn remote debugging on. Chrome/Edge: `chrome://inspect/#remote-debugging` / `edge://inspect/#remote-debugging`.
 - Or start the browser with `--remote-debugging-port=9222`. Chrome 136+ ignores that flag for the default profile, so add `--user-data-dir=<separate dir>` in that case.
-- The script finds the port from the browser's `DevToolsActivePort` file. Overrides: `CDP_BROWSER=brave|chrome|edge|chromium`, `CDP_PORT`, `CDP_URL=ws://...`, `CDP_RELAY_PORT` (default 9333).
+- The script finds the port from the browser's `DevToolsActivePort` file. Overrides: `CDP_BROWSER=brave|chrome|edge|chromium`, `CDP_PORT`, `CDP_URL=ws://...`, `CDP_RELAY_PORT` (default 9333). When `CDP_BROWSER`, `CDP_PORT` or `CDP_URL` is set, a running relay is used only if it is connected to that browser.
 
 ## Commands
 ```
@@ -58,4 +58,4 @@ export default async function ({ page, tabs, waitEvent, downloadsTo, cdp, log, a
 - The connection has full control of the user's logged-in browser. Only do what the user asked.
 - Never read, print or export cookies, passwords, tokens or localStorage secrets.
 - Ask before anything outward-facing or hard to undo: sending messages, posting, submitting forms, purchases, deleting.
-- The relay listens on 127.0.0.1 only and requires the random token in `~/.cdp-relay-token`, which is deleted on exit. Any process running as the user can still read that file, so don't leave the relay running unattended.
+- The relay listens on 127.0.0.1 only and requires the random token in `~/.cdp-relay-token` (`~/.cdp-relay-token-<port>` for another `CDP_RELAY_PORT`), which is deleted on exit. Any process running as the user can still read that file, so don't leave the relay running unattended.

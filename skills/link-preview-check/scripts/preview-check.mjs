@@ -15,23 +15,34 @@ const OUT = path.resolve(opt('out') || 'link-preview.html');
 const sitemap = opt('sitemap');
 let urls = [];
 const base = argv.find(a => /^https?:\/\//.test(a));
-for (const a of argv) urls.push(/^https?:\/\//.test(a) ? a : base ? new URL(a, base).href : a);
+// Git Bash on Windows rewrites "/about" to "C:/Program Files/Git/about" and "/p/post" to "P:/post"; undo that.
+const unmsys = a => a.replace(/^[A-Za-z]:[\\/].*?[\\/]Git[\\/]/, '/').replace(/^([A-Za-z]):\//, (_, d) => `/${d.toLowerCase()}/`);
+for (const a of argv) urls.push(/^https?:\/\//.test(a) ? a : base ? new URL(unmsys(a), base).href : a);
 if (sitemap) {
-  const xml = await (await fetch(sitemap)).text();
-  urls.push(...[...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map(m => m[1]).slice(0, 50));
+  const locs = async u => { // <loc> URLs of a sitemap; a sitemap index is followed one level down
+    let xml;
+    try { xml = await (await fetch(u, { signal: AbortSignal.timeout(15000) })).text(); }
+    catch (e) { console.error(`could not fetch sitemap ${u}: ${e.cause?.code || e.message}`); process.exit(1); }
+    return { index: /<sitemapindex\b/i.test(xml), list: [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map(m => m[1].replace(/&amp;/g, '&')) };
+  };
+  const top = await locs(sitemap);
+  if (!top.list.length) { console.error(`no <loc> URLs in ${sitemap}: not a sitemap (a single-page app may serve index.html there)`); process.exit(1); }
+  if (top.index) for (const s of top.list) { if (urls.length >= 50) break; urls.push(...(await locs(s)).list.slice(0, 50 - urls.length)); }
+  else urls.push(...top.list.slice(0, 50));
 }
 urls = [...new Set(urls)];
 if (!urls.length) { console.log('usage: node preview-check.mjs <url> [more urls or /paths] [--sitemap url] [--out file.html]'); process.exit(1); }
 
 const UA = 'Mozilla/5.0 (compatible; link-preview-check/1.0; +https://github.com/binay-py/claude-skills)';
-const decode = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n));
+const decode = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, '&'); // &amp; last: no double decoding
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 function parseHead(html) {
   const head = html.slice(0, (html.search(/<\/head>/i) + 1 || 200000) + 7);
   const meta = {};
   for (const m of head.matchAll(/<meta\b[^>]*>/gi)) {
-    const tag = m[0], attr = n => (tag.match(new RegExp(`\\b${n}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')) || [])
+    const tag = m[0], attr = n => (tag.match(new RegExp(`\\s${n}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')) || [])
       .slice(2).find(v => v !== undefined);
     const key = (attr('property') || attr('name') || '').toLowerCase(), val = attr('content');
     if (key && val !== undefined && !(key in meta)) meta[key] = decode(val.trim());

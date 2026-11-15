@@ -22,7 +22,7 @@ Output: a one-line inventory, which sections exist, findings sorted high → inf
 | high | relative link or image to a file that doesn't exist, or exists with different letter case (works on Windows/macOS, broken on GitHub); an http(s) link that returns 404/410; a command running a package.json script that isn't there (`npm run x`, `npm test`, `pnpm x`, `yarn x`, `bun run x`); a command running a file that isn't in the repo (`node scripts/x.mjs`, `python x.py`, `./x.sh`); README names a license but there is no LICENSE file, or it names a different one |
 | medium | no `# Title` near the top, no one-line description under it, no Install / Usage / License section, no LICENSE file; `#anchor` links that match no heading (GitHub slug rules, duplicates get `-1`, `<a name>` counts), anchors into other .md files; http(s) links that time out, fail DNS, or return other errors; badges that don't return an image; package.json `license` that disagrees with LICENSE |
 | low | placeholders in commands (`<your-api-key>`, `YOUR_TOKEN`, `your-site.com`, `xxx`); a command whose file exists elsewhere in the repo (the README assumes a subfolder: say which); `curl … \| sh` and `sudo npm install` |
-| info | 403/429/999 from sites that block scripts (LinkedIn, X, npm, Medium…), reported as unverified; over 300 lines with no table of contents; a UI project (React/Vue/Vite/Electron/index.html/Streamlit…) with no screenshot or GIF |
+| info | 403/429/999 from sites that block scripts (LinkedIn, X, npm, Medium…) and the 404 GitHub gives logged-out requests for `/stargazers` and `/watchers`, reported as unverified; over 300 lines with no table of contents; a UI project (React/Vue/Vite/Electron/index.html/Streamlit…) with no screenshot or GIF |
 
 Commands come from ```` ```bash/sh/shell/console/powershell/cmd ```` blocks and from `$ ` lines in any block. In console blocks only the `$ ` lines count, the rest is output. `cd` is followed within a block, and `git clone …/name.git` + `cd name` is treated as the repo root.
 
@@ -45,6 +45,6 @@ Everything else is skipped with the reason: sudo, rm, curl/wget/iwr, git (includ
 ## Limits
 - Commands are checked statically except under `--run`. Runtime success depends on this machine (OS, installed toolchains, network); a command that fails here may work elsewhere, and vice versa. `npm install` still runs dependency install scripts, as it would for any user.
 - Only README.md is audited, not other docs (anchors into other .md files are checked).
-- Link checks send one HEAD (falling back to GET) per unique URL with a 10 s timeout. Some hosts return 403/5xx to scripts; check those in a browser before reporting them as broken.
+- Link checks cover `[text](url)`, reference links, HTML `href`/`src`, and bare or `<https://…>` URLs (GitHub autolinks them), not URLs inside code. They send one HEAD (falling back to GET) per unique URL with a 10 s timeout. Some hosts return 403/5xx to scripts; check those in a browser before reporting them as broken.
 - Heading slugs follow GitHub's rules; GitLab and other renderers differ slightly. HTML-only READMEs and reStructuredText are not parsed.
 - Section detection is by heading words (Install/Setup/Getting started, Usage/Quick start/Examples, License). A README that explains installation under a different heading gets a false "missing section".

@@ -14,12 +14,12 @@ The whole edit is motion.json. Clip fields:
   title         [line1, line2] big title sticker;  verse: [text, reference] fade-in verse card
   flash, shake, punch, speech   white flash in / camera shake / zoom punch on the cut / keep clip sound loud
 """
-from fonts import font, ff_font
-import hashlib, json, subprocess, sys, wave
+from fonts import font, ff_font, needs_shaping, shaped, paste_shaped
+import hashlib, json, re, subprocess, sys, wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 import pillow_heif
 
 pillow_heif.register_heif_opener()
@@ -32,6 +32,15 @@ MEDIA = {m["id"]: m for m in json.loads((WORK / "media.json").read_text())}
 FPS, SR = 30, 48000
 FMT = {"horizontal": (1920, 1080, "recap-motion.mp4"), "vertical": (1080, 1920, "recap-motion-vertical.mp4")}
 F_BLACK, F_EMOJI, F_SERIF = font("black"), font("emoji"), font("serif_bold")
+DEVA = re.compile("[\u0900-\u097F]")  # Nepali/Hindi: the fonts above have no Devanagari
+
+
+def font_for(text, path):
+    return font("devanagari") if DEVA.search(text) else path
+
+
+def deva_rev(x):  # cache-key part: re-render stickers/clips cached when Devanagari still drew as boxes
+    return ["d1"] if DEVA.search(json.dumps(x, ensure_ascii=False)) else []
 
 
 def run(cmd):
@@ -63,15 +72,22 @@ def runs(text):
 
 
 def draw_line(text, size, fill, stroke=0, stroke_fill="black"):
-    ft, fe = ImageFont.truetype(F_BLACK, size), ImageFont.truetype(F_EMOJI, int(size * 0.92))
+    path = font_for(text, F_BLACK)
+    ft, fe = ImageFont.truetype(path, size), ImageFont.truetype(F_EMOJI, int(size * 0.92))
     parts = runs(text)
-    w = sum((fe if e else ft).getlength(s) for e, s in parts) + 2 * stroke + 8
+    sp = ft.getlength(" ")
+    sh = {s: shaped(s.strip(), path, size, stroke) for e, s in parts if not e and needs_shaping(s)}  # Devanagari via ffmpeg
+    adv = lambda e, s: fe.getlength(s) if e else (sh[s][4] + sp * (len(s) - len(s.strip())) if s in sh else ft.getlength(s))  # noqa: E731
+    w = sum(adv(e, s) for e, s in parts) + 2 * stroke + 8
     im = Image.new("RGBA", (int(w), int(size * 1.45) + 2 * stroke), (0, 0, 0, 0))
     d, x = ImageDraw.Draw(im), stroke + 4
     for e, s in parts:
         if e:
             d.text((x, stroke + size * 0.12), s, font=fe, embedded_color=True)
             x += fe.getlength(s)
+        elif s in sh:
+            paste_shaped(im, x + sp * (len(s) - len(s.lstrip())), stroke + ft.getmetrics()[0], sh[s], fill, stroke_fill)
+            x += adv(e, s)
         else:
             d.text((x, stroke), s, font=ft, fill=fill, stroke_width=stroke, stroke_fill=stroke_fill)
             x += ft.getlength(s)
@@ -90,7 +106,7 @@ def wrap(text, n):
 
 def sticker(kind, payload, fmt):
     W, H, _ = FMT[fmt]
-    out = MS / f"st_{fmt}_{h(kind, payload)}.png"
+    out = MS / f"st_{fmt}_{h(kind, payload, *deva_rev(payload))}.png"
     if out.exists():
         return out
     u = min(W, H)
@@ -122,15 +138,22 @@ def sticker(kind, payload, fmt):
         im.alpha_composite(a, ((im.width - a.width) // 2, 0)); im.alpha_composite(b, ((im.width - b.width) // 2, a.height + 10))
         tilt = -2
     elif kind == "verse":
-        fs = ImageFont.truetype(F_SERIF, int(u * 0.05)); fr = ImageFont.truetype(F_BLACK, int(u * 0.04))
+        pa, pb = font_for(payload[0], F_SERIF), font_for(payload[1], F_BLACK)
+        fs = ImageFont.truetype(pa, int(u * 0.05)); fr = ImageFont.truetype(pb, int(u * 0.04))
         lines = wrap(payload[0], 34 if W > H else 22)
         lh = int(u * 0.068)
         im = Image.new("RGBA", (int(W * 0.9), lh * len(lines) + int(u * 0.12)), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
+
+        def ma(y, t, f, path, fill):  # centred, top at the ascender (Pillow anchor "ma"); Devanagari shaped by ffmpeg
+            if needs_shaping(t):
+                s = shaped(t, path, f.size, 3)
+                paste_shaped(im, (im.width - s[4]) / 2, y + f.getmetrics()[0], s, fill, (0, 0, 0, 160))
+            else:
+                d.text((im.width / 2, y), t, font=f, fill=fill, anchor="ma", stroke_width=3, stroke_fill=(0, 0, 0, 160))
         for i, l in enumerate(lines):
-            d.text((im.width / 2, i * lh), l, font=fs, fill="white", anchor="ma", stroke_width=3, stroke_fill=(0, 0, 0, 160))
-        d.text((im.width / 2, len(lines) * lh + int(u * 0.03)), payload[1].upper(), font=fr, fill=(255, 205, 40), anchor="ma",
-               stroke_width=3, stroke_fill=(0, 0, 0, 160))
+            ma(i * lh, l, fs, pa, "white")
+        ma(len(lines) * lh + int(u * 0.03), payload[1].upper(), fr, pb, (255, 205, 40))
         tilt = 0
     if tilt:
         im = im.rotate(tilt, resample=Image.BICUBIC, expand=True)
@@ -158,7 +181,7 @@ def render_clip(fmt, i, c, nframes, beat):
     W, H, _ = FMT[fmt]
     m = MEDIA[c["id"]]
     D = nframes / FPS
-    k = h(fmt, c, nframes, round(beat, 5), "m6")
+    k = h(fmt, c, nframes, round(beat, 5), "m6", *deva_rev(c))
     vout, aout = MS / f"{fmt}_{i:03d}_{k}.mp4", MS / f"{fmt}_{i:03d}_{k}.wav"
     events = []  # (time-in-clip, sfx)
     speed = float(c.get("speed", 1))
@@ -179,8 +202,12 @@ def render_clip(fmt, i, c, nframes, beat):
     if vout.exists() and aout.exists():
         return vout, aout, events
     a_src, a_can = (m["w"] / m["h"]), W / H
+    if m["type"] == "photo":  # ffmpeg can't -loop a HEIC and ignores EXIF rotation: give it an upright JPEG
+        still = MS / f"photo_{c['id']}.jpg"
+        if not still.exists():
+            ImageOps.exif_transpose(Image.open(ROOT / m["file"])).convert("RGB").save(still, quality=92)
     inputs = (["-ss", f"{st:.3f}", "-t", f"{src_len + 0.3:.3f}", "-i", str(ROOT / m["file"])] if m["type"] == "video"
-              else ["-loop", "1", "-framerate", str(FPS), "-t", f"{D + 0.3:.3f}", "-i", str(ROOT / m["file"])])
+              else ["-loop", "1", "-framerate", str(FPS), "-t", f"{D + 0.3:.3f}", "-i", str(still)])
     g = f"[0:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},"
     if 0.9 < a_src / a_can < 1.15:
         g += f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}[base];"
@@ -304,7 +331,7 @@ def beat_grid(track, bpm):
 # ---------------------------------------------------------------- assemble
 def build(fmt):
     W, H, name = FMT[fmt]
-    MS.mkdir(parents=True, exist_ok=True)
+    MS.mkdir(parents=True, exist_ok=True); OUT.mkdir(exist_ok=True)
     track = ROOT / PLAN["music"]
     gk = MS / f"grid_{h(PLAN['music'], PLAN['bpm'])}.json"
     if gk.exists():

@@ -23,7 +23,13 @@ const PLACEHOLDER = /^(|changeme|change_me|your[-_ ].*|<.*>|\$\{.*\}|xxx+|\*+|to
 
 // ---------- collect usage in code ----------
 const used = new Map(); // name -> Set(files)
-const note = (name, file) => { if (!/^[A-Z_][A-Z0-9_]*$/.test(name) || name.length < 2) return; (used.get(name) || used.set(name, new Set()).get(name)).add(path.relative(root, file).split(path.sep).join('/')); };
+// a trailing "_" is a prefix of a built name (os.environ.get("FONT_" + kind)), not a variable
+const note = (name, file) => { if (!/^[A-Z_][A-Z0-9_]*$/.test(name) || name.length < 2 || name.endsWith('_')) return; (used.get(name) || used.set(name, new Set()).get(name)).add(path.relative(root, file).split(path.sep).join('/')); };
+// Cloudflare Workers / Pages Functions read env.X from the handler's env and keep local values in .dev.vars.
+// Names in the wrangler config are bindings (DB, KV, AI, ASSETS…) or [vars], not variables to document or set.
+const wranglerFiles = ['wrangler.toml', 'wrangler.json', 'wrangler.jsonc'].map(f => path.join(root, f)).filter(f => fs.existsSync(f));
+const WORKER = wranglerFiles.length > 0 || fs.existsSync(path.join(root, '.dev.vars'));
+const BOUND = new Set(); for (const f of wranglerFiles) for (const m of fs.readFileSync(f, 'utf8').matchAll(/["']([A-Z_][A-Z0-9_]*)["']|^\s*([A-Z_][A-Z0-9_]*)\s*=/gm)) BOUND.add(m[1] || m[2]);
 const PATTERNS = [
   /process\.env\.([A-Z_][A-Z0-9_]*)/g, /process\.env\[\s*['"`]([A-Z_][A-Z0-9_]*)['"`]\s*\]/g,
   /import\.meta\.env\.([A-Z_][A-Z0-9_]*)/g, /Deno\.env\.get\(\s*['"]([A-Z_][A-Z0-9_]*)['"]/g, /Bun\.env\.([A-Z_][A-Z0-9_]*)/g,
@@ -35,6 +41,7 @@ const PATTERNS = [
 function scan(file) {
   let t; try { if (fs.statSync(file).size > 2e6) return; t = fs.readFileSync(file, 'utf8'); } catch { return; }
   for (const re of PATTERNS) for (const m of t.matchAll(re)) note(m[1], file);
+  if (WORKER && /\.(m?[jt]sx?|cjs|cts|mts)$/i.test(file)) for (const m of t.matchAll(/\benv\.([A-Z_][A-Z0-9_]*)/g)) note(m[1], file); // env.X, c.env.X, context.env.X
   for (const m of t.matchAll(/(?:const|let|var)\s*\{([^}]+)\}\s*=\s*(?:process\.env|import\.meta\.env|Bun\.env)/g)) // destructuring
     for (const part of m[1].split(',')) { const n = part.trim().split(/[:=\s]/)[0]; if (n) note(n, file); }
   if (/\.(sh|bash|ya?ml|toml)$/i.test(file) || /docker-compose|compose\.ya?ml|Dockerfile/i.test(file)) for (const m of t.matchAll(/\$\{([A-Z_][A-Z0-9_]*)(?::?[-?][^}]*)?\}/g)) note(m[1], file);
@@ -58,15 +65,17 @@ function parseEnv(file) {
   }
   return out;
 }
-const envFiles = fs.readdirSync(root).filter(f => /^\.env(\..+)?$/.test(f) && fs.statSync(path.join(root, f)).isFile());
-const EXAMPLE = envFiles.find(f => /^\.env\.(example|sample|template|dist|defaults)$/.test(f));
+// .dev.vars is wrangler's local env file; *.bak (our own --fix-example backup) is not an env file
+const envFiles = fs.readdirSync(root).filter(f => /^\.(env|dev\.vars)(\..+)?$/.test(f) && !f.endsWith('.bak') && fs.statSync(path.join(root, f)).isFile());
+const EXAMPLE = envFiles.find(f => /^\.(env|dev\.vars)\.(example|sample|template|dist|defaults)$/.test(f));
 const LOCAL = envFiles.filter(f => f !== EXAMPLE);
+const NEW_EXAMPLE = LOCAL.includes('.dev.vars') && !LOCAL.some(f => f.startsWith('.env')) ? '.dev.vars.example' : '.env.example';
 const example = EXAMPLE ? parseEnv(path.join(root, EXAMPLE)) : null;
 const local = new Map(); for (const f of LOCAL) for (const [k, v] of parseEnv(path.join(root, f))) if (!local.has(k)) local.set(k, { v, f });
 
 // ---------- findings ----------
 const findings = []; const add = (sev, msg) => findings.push({ sev, msg });
-const names = [...used.keys()].filter(n => !RUNTIME.has(n)).sort();
+const names = [...used.keys()].filter(n => !RUNTIME.has(n) && !BOUND.has(n)).sort();
 const where = n => { const s = [...used.get(n)]; return s.slice(0, 2).join(', ') + (s.length > 2 ? ` +${s.length - 2}` : ''); };
 
 for (const n of names) if (PUBLIC_PREFIX.test(n) && SECRETY.test(n.replace(PUBLIC_PREFIX, '')) && !PUBLIC_OK.test(n))
@@ -78,7 +87,7 @@ if (example) {
   if (undocumented.length) add('medium', `${undocumented.length} variable(s) used in code but missing from ${EXAMPLE}, so new setups won't know to set them: ${undocumented.map(n => `${n} (${where(n)})`).slice(0, 12).join(', ')}${undocumented.length > 12 ? ' …' : ''}`);
   const stale = [...example.keys()].filter(k => !used.has(k) && !RUNTIME.has(k));
   if (stale.length) add('low', `${stale.length} variable(s) in ${EXAMPLE} that no code reads (stale, or read by a tool/framework config): ${stale.slice(0, 12).join(', ')}`);
-} else if (names.length) add('medium', `no .env.example: ${names.length} variable(s) used in code are documented nowhere. Run with --fix-example to create one`);
+} else if (names.length) add('medium', `no ${NEW_EXAMPLE}: ${names.length} variable(s) used in code are documented nowhere. Run with --fix-example to create one`);
 if (LOCAL.length) {
   const unset = names.filter(n => !local.has(n) && !(example && example.get(n)));
   if (unset.length) add('medium', `${unset.length} variable(s) used in code but not set in ${LOCAL.join(' / ')}. They'll be undefined locally: ${unset.slice(0, 12).join(', ')}${unset.length > 12 ? ' …' : ''}`);
@@ -96,12 +105,12 @@ if (inGit) for (const f of LOCAL) {
 }
 
 // ---------- report ----------
-console.log(`env-doctor: ${root}\n  code uses ${names.length} variable(s)${used.size - names.length ? ` (+${used.size - names.length} standard runtime ones ignored)` : ''} · env files: ${envFiles.join(', ') || 'none'}\n`);
+console.log(`env-doctor: ${root}\n  code uses ${names.length} variable(s)${used.size - names.length ? ` (+${used.size - names.length} standard runtime${BOUND.size ? ' or wrangler binding' : ''} ones ignored)` : ''} · env files: ${envFiles.join(', ') || 'none'}\n`);
 const ORDER = { high: 0, medium: 1, low: 2 };
 if (!findings.length) console.log('✓ everything lines up');
 for (const f of findings.sort((a, b) => ORDER[a.sev] - ORDER[b.sev])) console.log(`${f.sev === 'high' ? '✘' : f.sev === 'medium' ? '!' : '·'} [${f.sev}] ${f.msg}`);
 if (FIX) {
-  const target = path.join(root, EXAMPLE || '.env.example'), missing = names.filter(n => !(example && example.has(n)));
+  const target = path.join(root, EXAMPLE || NEW_EXAMPLE), missing = names.filter(n => !(example && example.has(n)));
   if (!missing.length) console.log('\n--fix-example: nothing to add');
   else {
     if (fs.existsSync(target)) fs.copyFileSync(target, target + '.bak');

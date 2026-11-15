@@ -13,7 +13,7 @@ Everything you'd want to tweak lives in edit.json:
 Each segment is rendered once to work/seg/ and cached by its settings, so re-renders after small edits are fast.
 """
 from fonts import font, ff_font
-import hashlib, json, subprocess, sys, textwrap
+import hashlib, json, re, subprocess, sys, textwrap
 from pathlib import Path
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 import pillow_heif
@@ -79,7 +79,23 @@ def drawtext(textfile, font, size, y, alpha_expr="1", color="white"):
             f"x=(w-text_w)/2:y={y}:shadowcolor=black@0.6:shadowx=2:shadowy=2:alpha='{alpha_expr}'")
 
 
+# drawtext has no font fallback: Devanagari needs a font that has it, and emoji can't be drawn at all
+DEVA = re.compile("[\u0900-\u097F]")
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2300-\u23FF\u2B00-\u2BFF\uFE0F\u200D]")
+
+
+def ff_font_for(text, kind):
+    return ff_font("devanagari") if DEVA.search(str(text)) else ff_font(kind)
+
+
+def text_rev(*texts):  # extra cache-key part, so segments cached before Devanagari/emoji handling re-render
+    return ["t2"] if any(DEVA.search(str(t)) or EMOJI.search(str(t)) for t in texts) else []
+
+
 def text_lines(name, text, width_chars):
+    if EMOJI.search(str(text)):
+        print("  note: emoji removed from a title/label/text (ffmpeg's drawtext draws them as boxes)")
+        text = re.sub(r"[ \t]+", " ", EMOJI.sub("", str(text))).strip()
     lines = []
     for para in str(text).split("\n"):
         lines += textwrap.wrap(para, width_chars) or [""]
@@ -96,7 +112,7 @@ def render_card(fmt, kind, dur):
     W, H, _ = FORMATS[fmt]
     title, sub = (edit["title"], edit["subtitle"]) if kind == "title" else (edit["closing"], edit.get("closing_sub", ""))
     bg_id = edit.get(f"{kind}_bg")
-    k = key(fmt, kind, dur, title, sub, bg_id, edit.get(f"{kind}_bg_at"), "v4")
+    k = key(fmt, kind, dur, title, sub, bg_id, edit.get(f"{kind}_bg_at"), "v4", *text_rev(title, sub))
     out = SEG / f"{fmt}_{kind}_{k}.mp4"
     if out.exists():
         return out
@@ -124,10 +140,10 @@ def render_card(fmt, kind, dur):
     filters = [f"scale={W * 2}:{H * 2}",
                f"zoompan=z='1+0.04*on/{nf}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={nf}:s={W}x{H}:fps={FPS}"]
     for i, f in enumerate(tl):
-        filters.append(drawtext(f, FONT_TITLE, big, y0 + i * gap_t, fade))
+        filters.append(drawtext(f, ff_font_for(title, "serif_bold"), big, y0 + i * gap_t, fade))
     ys = y0 + len(tl) * gap_t + int(small * 0.8)
     for i, f in enumerate(sl):
-        filters.append(drawtext(f, FONT_TEXT, small, ys + i * gap_s, fade, color="0xF2D9A0"))
+        filters.append(drawtext(f, ff_font_for(sub, "serif"), small, ys + i * gap_s, fade, color="0xF2D9A0"))
     filters += ["setsar=1", "format=yuv420p"]
     run(["ffmpeg", "-y", "-v", "error", "-i", str(still), "-f", "lavfi", "-t", str(dur), "-i", "anullsrc=r=48000:cl=stereo",
          "-filter_complex", f"[0:v]{','.join(filters)}[v]", "-map", "[v]", "-map", "1:a", "-t", str(dur),
@@ -143,7 +159,7 @@ def label_filter(fmt, seg, dur):
     size = int(min(W, H) * 0.04)
     a = f"if(lt(t,0.5),0,if(lt(t,1.0),(t-0.5)/0.5,if(gt(t,{dur - 0.8}),max(0,({dur - 0.3}-t)/0.5),1)))"
     x, y = (int(W * 0.05), int(H * 0.85)) if W > H else ("(w-text_w)/2", int(H * 0.80))
-    return (f",drawtext=fontfile='{FONT_TITLE}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:x={x}:y={y}:"
+    return (f",drawtext=fontfile='{ff_font_for(seg['label'], 'serif_bold')}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:x={x}:y={y}:"
             f"shadowcolor=black@0.7:shadowx=2:shadowy=2:alpha='{a}'")
 
 
@@ -156,7 +172,7 @@ def render_segment(fmt, i, seg, has_music):
     clip_vol = 1.0 if (speech or not has_music) else float(edit.get("ambient_volume", 0.25))
     if m["type"] == "photo":
         dur = float(seg.get("dur", edit.get("photo_seconds", 3.0)))
-        k = key(fmt, seg, clip_vol, "p3")
+        k = key(fmt, seg, clip_vol, "p3", *text_rev(seg.get("label", "")))
         out = SEG / f"{fmt}_{i:03d}_{k}.mp4"
         if out.exists():
             return out, dur, False
@@ -179,7 +195,7 @@ def render_segment(fmt, i, seg, has_music):
         start = float(seg.get("start", 0))
     start = max(0.0, min(start, m["duration"] - dur - 0.05))
     dur = min(dur, max(1.0, m["duration"] - start - 0.05))
-    k = key(fmt, seg, clip_vol, "v3")
+    k = key(fmt, seg, clip_vol, "v3", *text_rev(seg.get("label", "")))
     out = SEG / f"{fmt}_{i:03d}_{k}.mp4"
     if out.exists():
         return out, dur, speech

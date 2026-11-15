@@ -19,7 +19,7 @@ const opt = n => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i + 1]
 const WARN = Number(process.env.HANDOFF_WARN_TOKENS || 150000), STEP = Number(process.env.HANDOFF_STEP_TOKENS || 50000);
 const PROJ = path.join(os.homedir(), '.claude', 'projects');
 const k = n => Math.round(n / 1000) + 'k';
-const REDACT = [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, /\bsk-ant-[A-Za-z0-9_-]{20,}/g, /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/g, /\b[sr]k_live_[0-9a-zA-Z]{16,}/g, /\bAKIA[0-9A-Z]{16}\b/g, /\bgh[pousr]_[0-9A-Za-z]{30,}/g, /\bgithub_pat_[0-9A-Za-z_]{40,}/g, /\bxox[abprs]-[0-9A-Za-z-]{10,}/g, /\bAIza[0-9A-Za-z_-]{35}\b/g, /\beyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}/g, /(\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)["']?[^\s"']{8,}/gi, /(:\/\/[^\s:@/]+:)[^\s@/]{3,}@/g];
+const REDACT = [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, /\bsk-ant-[A-Za-z0-9_-]{20,}/g, /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/g, /\b[sr]k_live_[0-9a-zA-Z]{16,}/g, /\bAKIA[0-9A-Z]{16}\b/g, /\bgh[pousr]_[0-9A-Za-z]{30,}/g, /\bgithub_pat_[0-9A-Za-z_]{40,}/g, /\bxox[abprs]-[0-9A-Za-z-]{10,}/g, /\bAIza[0-9A-Za-z_-]{35}\b/g, /\beyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}/g, /(\bBearer\s+)[A-Za-z0-9._~+\/-]{16,}=*/gi, /(\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)["']?[^\s"']{8,}/gi, /(:\/\/[^\s:@/]+:)[^\s@/]{3,}@/g];
 const redact = s => REDACT.reduce((t, re) => t.replace(re, (m, p1) => (typeof p1 === 'string' && m.startsWith(p1) ? p1 : '') + '[redacted]'), s);
 
 function tail(file, bytes) { const fd = fs.openSync(file, 'r'), size = fs.fstatSync(fd).size, len = Math.min(size, bytes), buf = Buffer.alloc(len); fs.readSync(fd, buf, 0, len, size - len); fs.closeSync(fd); return buf.toString('utf8'); }
@@ -32,11 +32,13 @@ function latestTranscript(cwd, session) {
   cands.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   // several sessions may be open: prefer the one that is running this command right now
   const recent = cands.filter(f => Date.now() - fs.statSync(f).mtimeMs < 15 * 60 * 1000);
-  return recent.find(f => /handoff\.mjs[^"\n]{0,40}\bwrite\b/.test(tail(f, 400 * 1024))) || cands[0] || null;
+  // (\\" allowed: a quoted path is logged as node \"…/handoff.mjs\" write inside the JSON string)
+  return recent.find(f => /handoff\.mjs(?:\\"|[^"\n]){0,40}\bwrite\b/.test(tail(f, 400 * 1024))) || cands[0] || null;
 }
 function readLines(file) { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); }
 function contextOf(entries) {
-  for (let i = entries.length - 1; i >= 0; i--) { const u = entries[i].type === 'assistant' && entries[i].message?.usage; if (u) return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0); }
+  // skip all-zero usage: Claude Code logs API errors ("Connection lost", "Login expired") as <synthetic> replies with 0 tokens
+  for (let i = entries.length - 1; i >= 0; i--) { const u = entries[i].type === 'assistant' && entries[i].message?.usage; const n = u ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) : 0; if (n) return n; }
   return 0;
 }
 
@@ -83,7 +85,7 @@ function write() {
       if (b?.type !== 'tool_use') continue;
       const i = b.input || {};
       if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(b.name) && (i.file_path || i.notebook_path)) { const f = i.file_path || i.notebook_path; files.set(f, (files.get(f) || 0) + 1); }
-      if (/^(Bash|PowerShell)$/.test(b.name) && i.command) cmds.push(i.command.split('\n')[0].slice(0, 140));
+      if (/^(Bash|PowerShell)$/.test(b.name) && i.command) cmds.push(redact(i.command.split('\n')[0]).slice(0, 140)); // redact before cutting, or a key split at 140 chars escapes the patterns
       if (b.name === 'TodoWrite' && Array.isArray(i.todos)) todos = i.todos;
     }
   }

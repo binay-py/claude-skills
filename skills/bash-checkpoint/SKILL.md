@@ -29,7 +29,7 @@ Merge into existing `hooks` rather than overwriting them. Restart Claude Code, t
 | `rm`, `mv`, `sed -i`, `find -delete`, `> file`, `Remove-Item`, `git restore/stash/rm` … | **Snapshot**, then runs normally |
 | everything else | nothing (no slowdown) |
 
-**Snapshots:** in a git repo, the whole working tree (tracked + untracked, respecting .gitignore) is stored as a commit under `refs/claude-checkpoints/`. Branches, index and stash are untouched. Outside git, the paths named in the command are copied to `~/.claude/checkpoints/<id>/` (up to 300 MB).
+**Snapshots:** in a git repo, the whole working tree (tracked + untracked, respecting .gitignore, so ignored files like `.env` are not in it) is stored as a commit under `refs/claude-checkpoints/`. Branches, index and stash are untouched. Outside git, and for paths the command names outside the repo (`rm ../other/x`, `rm /tmp/y`), the paths are copied to `~/.claude/checkpoints/<id>/` (up to 300 MB).
 
 ## Restoring
 ```
@@ -39,12 +39,12 @@ node checkpoint.mjs restore <id>       # put everything back
 node checkpoint.mjs restore <id> src/  # just one path
 node checkpoint.mjs prune --keep 50
 node checkpoint.mjs test "rm -rf ~"    # see what the rules would do
-node tests/run.mjs                    # 45 rule test cases (block / ask / snapshot / none)
+node tests/run.mjs                    # 67 rule test cases (block / ask / snapshot / none)
 ```
 Restoring brings back deleted and modified files and leaves files created after the snapshot alone.
 
 ## Limits (tell the user)
 - It's pattern-based, so a determined or obfuscated command (`eval $(echo …)`, a script file that deletes things) can get past it. It's a seatbelt, not a sandbox. Pair it with deny rules (`claude-safety-audit --fix`) and run risky work in a container.
 - The snapshot runs *before* the command, so files the same command creates and then deletes can't be saved.
-- Block rules check each command segment and fire only when that segment *runs* the program (`rm`, `Remove-Item`, `mkfs`…), unwrapping `bash -c`, `sh -c`, `eval`, `powershell -Command` and `cmd /c`. Mentions inside quotes (commit messages, grep patterns) pass. A heredoc line that starts with `rm -rf ~` counts as a command and is blocked; that's deliberate, so put such test text in a file.
+- Block rules check each command segment and fire only when that segment *runs* the program (`rm`, `Remove-Item`, `mkfs`…), unwrapping `bash -c`, `sh -c`, `eval`, `powershell -Command` and `cmd /c`. Mentions inside quotes (commit messages, grep patterns) pass. A heredoc body fed to a command that only reads it (`git commit -F - <<EOF`, `cat > notes.md <<EOF`) is data and is skipped. It is still checked when a shell runs it (`bash <<EOF`, `ssh host <<EOF`, `cat <<EOF | sh`) or when the same command later runs a script (`bash x.sh`, `./x.sh`).
 - Quoted text is ignored for snapshot/ask decisions, so `git commit -m "rm old docs"` or `grep "rm"` does nothing. Compound commands (`cd dir && rm x`) are followed segment by segment.

@@ -45,7 +45,7 @@ const transitions = sentences.filter(s => /^(moreover|furthermore|additionally|i
 if (transitions) hit(4, 'low', `${transitions} sentence(s) start with Moreover/Furthermore/Additionally: essay filler.`);
 
 // 3. leftovers
-const ph = text.match(/\[[A-Z][^\]]{0,30}\]|\{\{?[a-z_ ]+\}?\}|<(name|client|company)>|\bXX+\b|lorem ipsum/gi);
+const ph = text.match(/\[[A-Z][^\]]{0,30}\](?!\()|\{\{?[a-z_ ]+\}?\}|<(name|client|company)>|\bXX+\b|lorem ipsum/gi);
 if (ph) hit(25, 'high', `Unfilled placeholder(s): ${[...new Set(ph)].join(', ')}`);
 
 // 4. client focus
@@ -55,7 +55,8 @@ if (sentences.length >= 4 && iStarts / sentences.length > 0.5) hit(8, 'medium', 
 if (me > 0 && you / me < 0.5 && nWords > 40) hit(5, 'low', `"I/me/my" ${me}× vs "you/your" ${you}×. Make it about the client.`);
 
 // 5. proof, plan, question, next step
-if (!/https?:\/\/|\b[\w-]+\.(com|dev|io|app|net|org|codes)\b|\b\d+(\.\d+)?\s?(%|x|k\b|users|sites|projects|clients|ms|seconds|hours|days|downloads|stars)/i.test(text))
+// a timeline ("in 3 days") is not proof; a before -> after ("from 6 s to 1.2 s") is
+if (!/https?:\/\/|\b[\w-]+\.(com|dev|io|app|net|org|codes)\b|\b\d+(\.\d+)?\s?(%|x|k\b|users|sites|projects|clients|ms|downloads|stars)|\bfrom \$?\d[\d.,]*\s?[\w%]*\s+to\s+\$?\d/i.test(text))
   hit(10, 'medium', 'No proof: add one relevant past project with a link, or a concrete number ("cut load time from 6 s to 1.2 s").');
 if (!/\?/.test(text)) hit(8, 'medium', 'No question to the client. One specific question ("Is the checkout on Shopify or custom?") gets replies.');
 if (!/\b(call|chat|message|reply|send|share|start|schedule|available|happy to|can begin|next step|today|tomorrow|this week)\b/i.test(text.slice(-300))) hit(4, 'low', 'No clear next step at the end ("Can start tomorrow; want a 10-minute call?").');
@@ -63,8 +64,9 @@ if (!/\b(call|chat|message|reply|send|share|start|schedule|available|happy to|ca
 // 6. job relevance
 if (job) {
   const STOP = new Set('the a an and or to of in for on with is are be will you your we our i my it this that need needs looking want have has from as at by can should must would like who what any some all more just also get site website app project work job help great good let show make use using within week weeks day days must very well already new please thanks'.split(' '));
-  const terms = [...new Set((job.toLowerCase().match(/[a-z][a-z0-9+#.-]{2,}/g) || []).filter(w => !STOP.has(w)))];
-  const freq = terms.map(t => [t, (job.toLowerCase().match(new RegExp(`\\b${t.replace(/[.+#]/g, '\\$&')}\\b`, 'g')) || []).length]).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
+  // drop sentence-final dots ("android." -> "android"); match c++/node.js without \b, which fails next to + and .
+  const terms = [...new Set((job.toLowerCase().match(/[a-z][a-z0-9+#.-]{2,}/g) || []).map(w => w.replace(/[.-]+$/, '')).filter(w => w.length > 2 && !STOP.has(w)))];
+  const freq = terms.map(t => [t, (job.toLowerCase().match(new RegExp(`(?<![a-z0-9])${t.replace(/[.+#]/g, '\\$&')}(?![a-z0-9])`, 'g')) || []).length]).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
   const used = freq.filter(t => text.toLowerCase().includes(t));
   if (used.length < Math.min(4, freq.length / 2)) hit(12, 'high', `Barely references the job post. Its key terms: ${freq.join(', ')}. You mention: ${used.join(', ') || 'none'}. Show you read it: name their stack, problem or deadline.`);
 }

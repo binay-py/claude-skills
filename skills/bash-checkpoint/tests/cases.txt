@@ -43,3 +43,35 @@ block|Remove-Item -Recurse -Force C:\Users\someone
 snapshot|rm -rf /home/alice/project/build
 snapshot|rm -rf /Users/alice/Downloads/old
 snapshot|Remove-Item -Recurse -Force C:\Users\someone\AppData\Local\Temp\x
+block|rm -rf ~/*
+block|rm -rf $HOME/*
+block|rm -rf -- ~
+block|rm --recursive --force ~
+block|rm -rf build ~
+block|rm -rf /c/Users/someone
+block|rm -rf /mnt/c
+block|bash -lc "rm -rf ~"
+block|echo 'a\' ; rm -rf ~
+block|sudo -u root rm -rf /
+block|Remove-Item -Force ~ -Recurse
+block|Remove-Item -r -fo ~
+block|Remove-Item ~\* -Recurse -Force
+block|rd /q /s C:\
+snapshot|rm -rf "$HOME"/.cache/foo
+snapshot|rm -rf /c/Users/someone/project/dist
+snapshot|rd /s /q build
+ask|git -C . push --force
+ask|git -C repo reset --hard
+ask|git reset HEAD~1 --hard
+ask|git clean -d -f
+none|git -C repo status
+none|git commit -q -F - <<'EOF'⏎- block rm -rf ~/*, Remove-Item -r -fo ~, rd /s /q C:\⏎EOF
+none|git commit -F- <<EOF⏎docs: never run rm -rf / or rm -rf ~⏎EOF
+snapshot|cat > notes.md <<'EOF'⏎Never run rm -rf ~ by accident.⏎EOF
+block|bash <<'EOF'⏎rm -rf ~⏎EOF
+block|cat <<'EOF' | bash⏎rm -rf ~⏎EOF
+block|ssh host <<'EOF'⏎rm -rf ~⏎EOF
+block|cat > x.sh <<'EOF'⏎rm -rf ~⏎EOF⏎bash x.sh
+block|cat > x.sh <<'EOF'⏎rm -rf ~⏎EOF⏎./x.sh
+block|git commit -F - <<'EOF'⏎msg⏎EOF⏎rm -rf ~
+block|cat <<EOF⏎rm -rf ~

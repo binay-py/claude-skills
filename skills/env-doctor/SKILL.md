@@ -12,7 +12,7 @@ node env-doctor.mjs [project-dir]
 node env-doctor.mjs . --fix-example     # append missing keys (empty) to .env.example, backup kept
 ```
 
-It finds variable reads in JS/TS (`process.env.X`, `process.env["X"]`, destructuring, `import.meta.env.X`, `Deno.env.get`, `Bun.env`), Python (`os.environ[...]`, `.get`, `os.getenv`), Ruby, Go, PHP, Rust, and `${X}` in shell scripts, Dockerfiles and docker-compose. It skips `node_modules`, build output and virtualenvs, and ignores standard runtime variables (NODE_ENV, PORT, HOME, CI…).
+It finds variable reads in JS/TS (`process.env.X`, `process.env["X"]`, destructuring, `import.meta.env.X`, `Deno.env.get`, `Bun.env`), Python (`os.environ[...]`, `.get`, `os.getenv`), Ruby, Go, PHP, Rust, and `${X}` in shell scripts, Dockerfiles and docker-compose. In Cloudflare Workers projects (a `wrangler.toml/json/jsonc` or `.dev.vars`) it also reads `env.X` and treats `.dev.vars` as the local env file, ignoring names the wrangler config declares as bindings or `[vars]`. It skips `node_modules`, build output and virtualenvs, and ignores standard runtime variables (NODE_ENV, PORT, HOME, CI…).
 
 | Severity | Finding |
 |---|---|

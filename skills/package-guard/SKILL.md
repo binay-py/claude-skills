@@ -26,7 +26,7 @@ Merge into existing `hooks` (it runs fine next to `bash-checkpoint`). Restart Cl
 node package-guard.mjs check react expresss pypi:reqeusts     # bare names = npm
 node package-guard.mjs check --json lodash pypi:numpy
 node package-guard.mjs parse "cd web && npm i -D vite@5 && pip install 'httpx>=0.27'"   # what would be checked (offline)
-node tests/run.mjs          # 82 offline tests: parsing, decision rules, fail-open
+node tests/run.mjs          # 88 offline tests: parsing, decision rules, fail-open
 node tests/run.mjs --live   # +21 tests against the real registries and the hook end to end
 ```
 

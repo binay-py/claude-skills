@@ -27,15 +27,19 @@ const seenMsg = new Set();
 const blank = () => ({ fresh: 0, cacheRead: 0, cacheWrite: 0, out: 0, reqs: 0 });
 const addU = (o, u) => { o.fresh += u.input_tokens || 0; o.cacheWrite += u.cache_creation_input_tokens || 0; o.cacheRead += u.cache_read_input_tokens || 0; o.out += u.output_tokens || 0; o.reqs++; };
 
+// subagent (Agent tool) transcripts live in <session-id>/subagents/*.jsonl; their tokens count toward limits too
+const subagentLogs = dir => { try { return fs.readdirSync(dir).filter(f => f.endsWith('.jsonl')).map(f => path.join(dir, f)); } catch { return []; } };
 const files = fs.readdirSync(PROJ, { withFileTypes: true }).filter(d => d.isDirectory() && (!FILTER || d.name.toLowerCase().includes(FILTER)))
-  .flatMap(d => fs.readdirSync(path.join(PROJ, d.name)).filter(f => f.endsWith('.jsonl')).map(f => ({ dir: d.name, file: path.join(PROJ, d.name, f) })))
+  .flatMap(d => fs.readdirSync(path.join(PROJ, d.name)).filter(f => f.endsWith('.jsonl')).map(f => ({ dir: d.name, file: path.join(PROJ, d.name, f), subs: subagentLogs(path.join(PROJ, d.name, f.slice(0, -6), 'subagents')) })))
   .filter(f => fs.statSync(f.file).mtimeMs >= since);
-process.stdout.write(`reading ${files.length} session log(s) from the last ${DAYS} days…\n`);
+const subCount = files.reduce((n, f) => n + f.subs.length, 0);
+process.stdout.write(`reading ${files.length} session log(s)${subCount ? ` + ${subCount} subagent log(s)` : ''} from the last ${DAYS} days…\n`);
 
-for (const { dir, file } of files) {
+for (const { dir, file, subs } of files) {
   const s = { id: path.basename(file, '.jsonl'), dir, title: '', cwd: '', ...blank(), maxCtx: 0, cost: null, toolCalls: 0, first: null, last: null };
+  for (const log of [file, ...subs]) { // a subagent's usage is added to the session that launched it
   const pending = new Map(); // tool_use_id -> name
-  const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
+  const rl = readline.createInterface({ input: fs.createReadStream(log, 'utf8'), crlfDelay: Infinity });
   for await (const line of rl) {
     if (!line) continue;
     let d; try { d = JSON.parse(line); } catch { continue; }
@@ -54,7 +58,7 @@ for (const { dir, file } of files) {
         seenMsg.add(id); addU(s, u);
         const day = (d.timestamp || '').slice(0, 10); if (day) { const o = byDay.get(day) || blank(); addU(o, u); byDay.set(day, o); }
         const mo = byModel.get(m.model || '?') || blank(); addU(mo, u); byModel.set(m.model || '?', mo);
-        s.maxCtx = Math.max(s.maxCtx, (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0));
+        if (log === file) s.maxCtx = Math.max(s.maxCtx,(u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0));
       }
     }
     if (d.type === 'user' && Array.isArray(m?.content)) {
@@ -64,6 +68,7 @@ for (const { dir, file } of files) {
         if (text.length > 20000) bigResults.push({ chars: text.length, tool: name, session: s.title || s.id, preview: text.slice(0, 80).replace(/\s+/g, ' ') });
       }
     }
+  }
   }
   if (s.reqs) sessions.set(s.id, s);
 }
@@ -78,7 +83,10 @@ let mcpCount = 0; try { const cj = JSON.parse(fs.readFileSync(path.join(os.homed
 let skillChars = 0, skillCount = 0;
 const scanSkills = dir => { try { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const f = path.join(dir, e.name, 'SKILL.md'); if (e.isDirectory() && fs.existsSync(f)) { const fm = fs.readFileSync(f, 'utf8').match(/^---[\s\S]*?\n---/); skillChars += fm ? fm[0].length : 0; skillCount++; } } } catch {} };
 scanSkills(path.join(CLAUDE, 'skills'));
-try { for (const p of fs.readdirSync(path.join(CLAUDE, 'plugins', 'cache'), { recursive: true })) if (String(p).endsWith(path.join('skills'))) scanSkills(path.join(CLAUDE, 'plugins', 'cache', String(p))); } catch {}
+// only installed, enabled plugins: the cache also keeps old versions, node_modules and other tools' copies that never load
+let enabled = {}; try { enabled = JSON.parse(fs.readFileSync(path.join(CLAUDE, 'settings.json'), 'utf8')).enabledPlugins || {}; } catch {}
+const inCwds = p => cwds.some(c => path.resolve(c).toLowerCase() === path.resolve(p).toLowerCase());
+try { for (const [k, list] of Object.entries(JSON.parse(fs.readFileSync(path.join(CLAUDE, 'plugins', 'installed_plugins.json'), 'utf8')).plugins || {})) for (const e of list) if (enabled[k] !== false && e.installPath && (!e.projectPath || inCwds(e.projectPath))) scanSkills(path.join(e.installPath, 'skills')); } catch {}
 
 // ---------- report ----------
 const all = [...sessions.values()];

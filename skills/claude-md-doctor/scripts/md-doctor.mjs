@@ -19,6 +19,7 @@ const root = path.resolve(process.argv[2] || '.');
 const HOME = os.homedir(), CLAUDE = path.join(HOME, '.claude');
 const short = p => { const r = path.relative(root, p); return (!r.startsWith('..') && !path.isAbsolute(r) && r ? './' + r : p.replace(HOME, '~')).split(path.sep).join('/'); };
 const tok = s => Math.round(s.length / 4);
+const lineCount = s => s ? s.split('\n').length - (s.endsWith('\n') ? 1 : 0) : 0; // a trailing newline doesn't start a line
 const findings = []; const add = (sev, file, msg) => findings.push({ sev, file: short(file), msg });
 const SECRET = /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-ant-[A-Za-z0-9_-]{20,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}|\b[sr]k_live_[0-9a-zA-Z]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[0-9A-Za-z]{30,}|\bgithub_pat_[0-9A-Za-z_]{40,}|\bxox[abprs]-[0-9A-Za-z-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|(postgres(ql)?|mysql|mongodb(\+srv)?|redis):\/\/[^\s:@/]+:[^\s@/]{3,}@/;
 
@@ -33,7 +34,7 @@ function load(file, kind, via = null, depth = 0, chain = []) {
   if (chain.includes(real)) { add('medium', file, `import cycle: ${[...chain, real].map(short).join(' → ')}`); return; }
   if (seen.has(real)) return; seen.add(real);
   const raw = fs.readFileSync(real, 'utf8'), text = stripComments(raw);
-  const lines = text.split('\n').length;
+  const lines = lineCount(text);
   loaded.push({ file: real, kind, chars: text.length, lines, via, saved: raw.length - text.length });
   if (SECRET.test(raw)) add('high', real, 'contains something that looks like a secret (key, token or credentialed URL). Instruction files are often committed: move it to an env var');
   if (kind !== 'import' && kind !== 'memory' && lines > 200) add('medium', real, `${lines} lines (docs target: under 200). Long files cost context every session and lower adherence; move area-specific parts into .claude/rules/ with a paths: filter`);
@@ -92,15 +93,17 @@ if (fs.existsSync(rulesDir)) for (const f of fs.readdirSync(rulesDir, { recursiv
   const p = path.join(rulesDir, String(f)), head = fs.readFileSync(p, 'utf8').slice(0, 500);
   if (/^---[\s\S]*?\npaths\s*:/m.test(head)) loaded.push({ file: p, kind: 'rule (on demand)', chars: 0, lines: 0, onDemand: true }); else load(p, 'rule');
 }
-// auto memory
-const memDir = path.join(CLAUDE, 'projects', root.replace(/[^a-zA-Z0-9]/g, '-'), 'memory'), memIdx = path.join(memDir, 'MEMORY.md');
+// auto memory: keyed by the git repo (main worktree), so subfolders and worktrees share one; else the folder itself
+const gitCommon = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root, encoding: 'utf8' });
+const memRoot = gitCommon.status === 0 && /[\\/]\.git[\\/]?$/.test(gitCommon.stdout.trim()) ? path.dirname(path.resolve(gitCommon.stdout.trim())) : root;
+const memDir = path.join(CLAUDE, 'projects', memRoot.replace(/[^a-zA-Z0-9]/g, '-'), 'memory'), memIdx = path.join(memDir, 'MEMORY.md');
 if (fs.existsSync(memIdx)) {
-  const t = fs.readFileSync(memIdx, 'utf8'), n = t.split('\n').length, kept = Math.min(t.length, 25 * 1024, t.split('\n').slice(0, 200).join('\n').length);
+  const t = fs.readFileSync(memIdx, 'utf8'), n = lineCount(t), kept = Math.min(t.length, 25 * 1024, t.split('\n').slice(0, 200).join('\n').length);
   loaded.push({ file: memIdx, kind: 'auto memory', chars: kept, lines: Math.min(n, 200) });
   if (n > 200 || t.length > 25 * 1024) add('medium', memIdx, `${n} lines / ${(t.length / 1024).toFixed(1)} KB: only the first 200 lines or 25 KB load, so ${n > 200 ? n - 200 + ' line(s)' : 'the end'} are invisible to Claude. Merge or prune entries`);
   const files = fs.readdirSync(memDir).filter(f => f.endsWith('.md') && f !== 'MEMORY.md');
   const orphan = files.filter(f => !t.includes(f)); if (orphan.length) add('low', memIdx, `${orphan.length} memory file(s) not linked from MEMORY.md, so never recalled: ${orphan.slice(0, 5).join(', ')}`);
-  const dead = [...t.matchAll(/\]\(([^)]+\.md)\)/g)].map(m => m[1]).filter(f => !fs.existsSync(path.join(memDir, f))); if (dead.length) add('low', memIdx, `links to missing memory file(s): ${dead.join(', ')}`);
+  const dead = [...t.matchAll(/\]\(([^)]+\.md)\)/g)].map(m => m[1]).filter(f => !fs.existsSync(path.join(memDir, f))); if (dead.length) add('low', memIdx, `links to ${dead.length} missing memory file(s): ${dead.slice(0, 5).join(', ')}${dead.length > 5 ? ' …' : ''}`);
 }
 // nested CLAUDE.md files (load on demand) — report sizes only
 const nested = [];

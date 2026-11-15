@@ -220,8 +220,9 @@ const logOnly = [...usage.entries()].filter(([k]) => !configuredKeys.has(k)).sor
 // ---------- optional: measure tools/list ----------
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'mcp-audit', version: '1.0.0' } } };
 const redact = t => { let s = String(t); for (const [re] of SECRETS) s = s.replace(new RegExp(re.source, 'g'), m => m.slice(0, 4) + '…'); return s.replace(/\s+/g, ' ').trim().slice(0, 120); };
-// the most useful stderr line: skip stack frames and the "Node.js vX" footer, prefer one that names an error
-const errLine = e => { const l = String(e).split(/\r?\n/).map(x => x.trim()).filter(x => x && !/^(at |Node\.js v|\^+$|node:)/.test(x)); return redact(l.find(x => /error|ERR_|not found|cannot|denied|refused/i.test(x)) || l.pop() || ''); };
+// the most useful stderr line: skip stack frames and the "Node.js vX" footer, prefer the "XxxError: message" line
+// (Node prints the throwing source line, e.g. "throw new ERR_MODULE_NOT_FOUND(...)", before it), then one that names an error
+const errLine = e => { const l = String(e).split(/\r?\n/).map(x => x.trim()).filter(x => x && !/^(at |Node\.js v|\^+$|node:)/.test(x)); return redact(l.find(x => /^[\w.]*(Error|Exception)\b/.test(x)) || l.find(x => /error|ERR_|not found|cannot|denied|refused/i.test(x)) || l.pop() || ''); };
 const quoteWin = a => /^[A-Za-z0-9_\-.:\\/@=+,]+$/.test(a) ? a : `"${String(a).replace(/"/g, '\\"')}"`;
 function killTree(child) { try { if (WIN) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); else process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch {} } }
 
@@ -373,7 +374,7 @@ if (twice.length) tips.push(`Same server configured under different names: ${[..
 const redundant = rows.filter(s => s.flags.some(f => f.includes(': redundant')));
 if (redundant.length) tips.push(`${redundant.length} local/project entr${redundant.length > 1 ? 'ies are' : 'y is'} an identical copy of a user-scope server (${[...new Set(redundant.map(s => s.name))].join(', ')}). Only one loads, so the copy does nothing except hide later changes to the user one. Remove the copies (claude mcp remove <name> -s local, run in that project).`);
 const secrets = rows.filter(s => s.flags.some(f => f.includes('secret')));
-if (secrets.length) tips.push(`Literal secrets in MCP config: ${secrets.map(s => s.name).join(', ')}. Replace the value with a \${ENV_VAR} reference (supported in command, args, env, url and headers) and set the variable in your shell. A project .mcp.json is meant to be committed, so a key there is a leak.`);
+if (secrets.length) tips.push(`Literal secrets in MCP config: ${[...new Set(secrets.map(s => s.name))].join(', ')}. Replace the value with a \${ENV_VAR} reference (supported in command, args, env, url and headers) and set the variable in your shell. A project .mcp.json is meant to be committed, so a key there is a leak.`);
 const pending = rows.filter(s => s.status === 'pending approval');
 if (pending.length) tips.push(`${pending.length} project .mcp.json server(s) were never approved, so they don't load: ${pending.map(s => s.name).join(', ')}.`);
 const measured = rows.filter(s => s.measure?.count != null);

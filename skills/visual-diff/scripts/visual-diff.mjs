@@ -129,7 +129,10 @@ async function launch() {
     if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); }
     else if (m.method) for (const l of listeners) l(m);
   };
-  const send = (method, params = {}, sessionId) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
+  // if the browser dies mid-run, fail with a message instead of hanging on replies that never come
+  let lost = null;
+  ws.onclose = () => { lost = new Error('lost the connection to the browser (did it crash?)'); for (const { rej } of pending.values()) rej(lost); pending.clear(); };
+  const send = (method, params = {}, sessionId) => { if (lost) return Promise.reject(lost); const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
   const close = () => br.close(send, ws);
   return { send, on: f => (listeners.add(f), () => listeners.delete(f)), close };
 }
@@ -144,12 +147,16 @@ async function shoot(b, url, vp, { full, hide, wait, file }) {
   let inflight = 0, lastNet = Date.now(), loaded = false, status = null;
   const off = b.on(m => {
     if (m.sessionId !== sessionId) return;
-    if (m.method === 'Network.requestWillBeSent') { inflight++; lastNet = Date.now(); }
+    // a redirect re-sends the same requestId and gets one loadingFinished for all hops, so count it once
+    if (m.method === 'Network.requestWillBeSent') { if (!m.params.redirectResponse) inflight++; lastNet = Date.now(); }
     if (m.method === 'Network.responseReceived' && m.params.type === 'Document' && status === null) status = m.params.response.status;
+    if (m.method === 'Network.dataReceived') lastNet = Date.now();
     if (m.method === 'Network.loadingFinished' || m.method === 'Network.loadingFailed') { inflight = Math.max(0, inflight - 1); lastNet = Date.now(); }
     if (m.method === 'Page.loadEventFired') loaded = true;
   });
-  const quiet = async (maxMs) => { const t = Date.now(); while (Date.now() - t < maxMs && !(loaded && inflight <= 0 && Date.now() - lastNet > 700)) await sleep(100); };
+  // Some requests never report finishing (fetch keepalive / sendBeacon analytics, long-polls); after load,
+  // 3 s with no network activity at all also counts as quiet, instead of waiting out maxMs.
+  const quiet = async (maxMs) => { const t = Date.now(); while (Date.now() - t < maxMs && !(loaded && Date.now() - lastNet > (inflight <= 0 ? 700 : 3000))) await sleep(100); };
   const ev = async e => (await s('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result.value;
   try {
     await Promise.all(['Network.enable', 'Page.enable', 'Runtime.enable'].map(m => s(m)));
@@ -199,8 +206,8 @@ function slug(u) {
 function resolveUrls(list) {
   const first = list.find(a => /^https?:\/\//.test(a));
   if (!first) throw new Error('need at least one http(s) URL');
-  // Git Bash on Windows rewrites "/about" to "C:/Program Files/Git/about"; undo that.
-  const fix = a => a.replace(/^[A-Za-z]:[\\/].*?[\\/]Git[\\/]/, '/');
+  // Git Bash on Windows rewrites "/about" to "C:/Program Files/Git/about" and "/p/post" to "P:/post"; undo that.
+  const fix = a => a.replace(/^[A-Za-z]:[\\/].*?[\\/]Git[\\/]/, '/').replace(/^([A-Za-z]):\//, (_, d) => `/${d.toLowerCase()}/`);
   return [...new Set(list.map(a => /^https?:\/\//.test(a) ? a : new URL(fix(a), first).href))];
 }
 

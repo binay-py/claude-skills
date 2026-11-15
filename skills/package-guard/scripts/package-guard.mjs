@@ -78,7 +78,7 @@ function segments(cmd) { // quote-aware split on && || ; | & and newlines
   const out = []; let cur = '', q = null;
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
-    if (q) { cur += c; if (c === q && cmd[i - 1] !== '\\') q = null; continue; }
+    if (q) { cur += c; if (c === q && (q === "'" || cmd[i - 1] !== '\\')) q = null; continue; } // no escapes inside '…'
     if (c === '"' || c === "'") { q = c; cur += c; continue; }
     if (c === '\n' || c === ';' || c === '|' || c === '&') { if (cur.trim()) out.push(cur.trim()); cur = ''; if ((c === '|' || c === '&') && cmd[i + 1] === c) i++; continue; }
     cur += c;
@@ -88,6 +88,8 @@ function segments(cmd) { // quote-aware split on && || ; | & and newlines
 }
 const tokens = s => (s.match(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s]+/g) || []).map(w => w.replace(/^"([\s\S]*)"$/, '$1').replace(/^'([\s\S]*)'$/, '$1'));
 const PREFIXES = /^(sudo|doas|command|env|nohup|time|exec|nice)$/;
+// Git Bash paths on Windows: /c/Users/x -> C:/Users/x, /tmp -> %TEMP%
+const msys = p => process.platform !== 'win32' ? p : p.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:/').replace(/^\/tmp(?=\/|$)/, os.tmpdir().replace(/\\/g, '/'));
 const SHELLS = /^(sh|bash|zsh|dash)$/, PWSH = /^(powershell|pwsh)(\.exe)?$/i, CMDEXE = /^cmd(\.exe)?$/i;
 // flags that take a value (so the value isn't mistaken for a package)
 const NPM_VAL = /^(--registry|--prefix|-C|--dir|-w|--workspace|--filter|--tag|--cache|--userconfig|--loglevel|--omit|--include|--install-strategy|--cwd|--modules-folder|--network-timeout|-p|--package|-c|--call)$/;
@@ -157,8 +159,10 @@ function fromTokens(t, ctx) {
   if (/^pip[\d.]*$/.test(p0) && pt[1] === 'install') return collect(pt.slice(2), 'pypi', PIP_VAL);
   if (p0 === 'uv' && pt[1] === 'pip' && pt[2] === 'install') return collect(pt.slice(3), 'pypi', PIP_VAL);
   if (p0 === 'uv' && pt[1] === 'add') return collect(pt.slice(2), 'pypi', PIP_VAL);
-  if (p0 === 'uv' && pt[1] === 'tool' && /^(install|run)$/.test(pt[2] || '')) return collect(pt.slice(3), 'pypi', PIP_VAL, { first: true });
-  if (p0 === 'uvx') return collect(pt.slice(1), 'pypi', PIP_VAL, { first: true });
+  // uvx --from httpie http: the package is the --from value, not the command name
+  const fromPkg = args => { const i = args.findIndex(a => /^--from(=|$)/.test(a)); return i < 0 ? null : args[i].includes('=') ? args[i].slice(7) : args[i + 1]; };
+  if (p0 === 'uv' && pt[1] === 'tool' && /^(install|run)$/.test(pt[2] || '')) { const f = fromPkg(pt.slice(3)); return collect(f ? [f] : pt.slice(3), 'pypi', PIP_VAL, { first: true }); }
+  if (p0 === 'uvx') { const f = fromPkg(pt.slice(1)); return collect(f ? [f] : pt.slice(1), 'pypi', PIP_VAL, { first: true }); }
   if (p0 === 'poetry' && pt[1] === 'add') return collect(pt.slice(2), 'pypi', PIP_VAL);
   if (p0 === 'pipx' && /^(install|run)$/.test(pt[1] || '')) return collect(pt.slice(2), 'pypi', PIP_VAL, { first: pt[1] === 'run' });
   return out;
@@ -169,12 +173,13 @@ export function parseCommand(cmd, cwd = process.cwd(), depth = 0) {
   const hasLocalBin = name => { const bin = name.replace(/^@[^/]+\//, ''); for (let d = dir; ; d = path.dirname(d)) { if (fs.existsSync(path.join(d, 'node_modules', '.bin', bin)) || fs.existsSync(path.join(d, 'node_modules', name, 'package.json'))) return true; if (path.dirname(d) === d) return false; } };
   for (const seg of segments(cmd)) {
     let t = tokens(seg);
-    while (t.length && (PREFIXES.test(t[0]) || /^\w+=/.test(t[0]))) t = t.slice(1);
+    // skip sudo/env/VAR=x and their options (sudo -H pip …, sudo -u me npm …)
+    for (let pre = false; t.length && (PREFIXES.test(t[0]) || /^\w+=/.test(t[0]) || (pre && t[0].startsWith('-'))); pre = true) t = t.slice(pre && /^-[ugn]$/.test(t[0]) ? 2 : 1);
     if (!t.length) continue;
     const c0 = t[0].replace(/^.*[\\/]/, '');
-    if (/^(cd|Set-Location|pushd|sl)$/i.test(c0) && t[1]) { dir = path.resolve(dir, t[1].replace(/^~(?=$|[\\/])/, os.homedir())); continue; }
+    if (/^(cd|Set-Location|pushd|sl)$/i.test(c0) && t[1]) { dir = path.resolve(dir, msys(t[1].replace(/^~(?=$|[\\/])/, os.homedir()))); continue; }
     if (depth < 2) {
-      let inner = null; const ci = t.indexOf('-c'), pi = t.findIndex(w => /^-(c|command)$/i.test(w)), ki = t.findIndex(w => /^\/c$/i.test(w));
+      let inner = null; const ci = t.findIndex(w => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(w)),pi = t.findIndex(w => /^-(c|command)$/i.test(w)), ki = t.findIndex(w => /^\/c$/i.test(w));
       if (SHELLS.test(c0) && ci > 0) inner = t[ci + 1]; else if (PWSH.test(c0) && pi > 0) inner = t.slice(pi + 1).join(' '); else if (CMDEXE.test(c0) && ki > 0) inner = t.slice(ki + 1).join(' ');
       if (inner) { found.push(...parseCommand(inner, dir, depth + 1)); continue; }
     }
@@ -328,6 +333,6 @@ const run = async () => {
   if (mode === 'parse') { const p = parseCommand(rest.join(' ')); console.log(p.map(x => `${x.eco}:${x.name}`).join(' ') || '(none)'); return 0; }
   console.log('usage: node package-guard.mjs hook | check <pkg|npm:pkg|pypi:pkg>… [--json] | parse "<command>"'); return 1;
 };
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) { // fileURLToPath: paths with spaces / non-ASCII
   run().then(code => process.exit(code ?? 0), e => { if (mode === 'hook') { process.stderr.write(`package-guard error (allowed): ${e.message}\n`); process.exit(0); } console.error(e); process.exit(1); });
 }

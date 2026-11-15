@@ -38,7 +38,7 @@ function judgeRead(file, offset, limit, { remember = true, stateless = false } =
   if (limit != null && Number(limit) > 0 && Number(limit) <= MAX_LINES) return null; // targeted read
   let m; try { m = measure(file); } catch { return null; } if (!m) return null;
   const effLines = limit ? Math.min(Number(limit), m.lines) : m.lines - (Number(offset) || 0);
-  if (effLines <= MAX_LINES && m.bytes <= MAX_BYTES * (limit ? 10 : 1)) return null;
+  if (effLines <= MAX_LINES && m.bytes <= MAX_BYTES * (limit || Number(offset) ? 10 : 1)) return null; // a slice (limit, or offset near the end)
   const key = `${path.resolve(file)}|${offset || ''}|${limit || ''}`, state = stateless ? {} : loadState();
   if (state[key] && Date.now() - state[key] < RETRY_MS) { delete state[key]; if (remember) saveState(state); return null; } // second attempt: allow
   if (remember) { state[key] = Date.now(); saveState(state); }
@@ -48,20 +48,27 @@ function judgeRead(file, offset, limit, { remember = true, stateless = false } =
     `then Read with offset/limit around them (e.g. offset: 1200, limit: 200). If you really need the entire file, repeat the exact same Read and it will be allowed.`;
 }
 
+// Git Bash paths on Windows: /c/Users/x -> C:/Users/x, /tmp -> %TEMP%
+const msys = p => process.platform !== 'win32' ? p : p.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:/').replace(/^\/tmp(?=\/|$)/, os.tmpdir().replace(/\\/g, '/'));
+const toPath = (dir, raw) => path.resolve(dir, msys(raw.replace(/^["']|["']$/g, '').replace(/^~(?=$|[\\/])/, os.homedir())));
+
 // cat/type/Get-Content of a big file with nothing limiting the output
+const PASS = /^(cat|tee|more|less|sort|tac|nl|rev|tr|column|uniq|Out-Host|Out-String|Write-Output|Sort-Object|Format-Table|Format-List)\b/i;
 function judgeCommand(cmd, cwd, { stateless = false } = {}) {
   const segs = cmd.split(/&&|\|\||;|\n/);
   let dir = cwd;
   for (const seg of segs) {
-    const parts = seg.split('|').map(s => s.trim()); const first = parts[0];
+    const parts = seg.split('|').map(s => s.trim()); const first = parts[0].replace(/\s+\d?>&\d\b|\s+2>\s*\S+/g, ''); // 2>&1, 2>/dev/null still print the file
     const cd = first.match(/^(?:cd|Set-Location|pushd|sl)\s+("[^"]+"|'[^']+'|\S+)\s*$/i);
-    if (cd) { dir = path.resolve(dir, cd[1].replace(/^["']|["']$/g, '').replace(/^~(?=$|[\\/])/, os.homedir())); continue; }
-    const m = first.match(/^(?:cat|type|more|Get-Content|gc)\s+((?:"[^"]+"|'[^']+'|[^\s|;&<>]+)(?:\s+(?:"[^"]+"|'[^']+'|[^\s|;&<>-][^\s|;&<>]*))*)\s*$/i);
+    if (cd) { dir = toPath(dir, cd[1]); continue; }
+    const m = first.match(/^(?:cat|type|more|Get-Content|gc)\s+((?:"[^"]+"|'[^']+'|[^\s|;&<>]+)(?:\s+(?:"[^"]+"|'[^']+'|[^\s|;&<>]+))*)\s*$/i);
     if (!m) continue;
-    if (parts.length > 1 && /^(head|tail|grep|rg|findstr|Select-String|Select-Object|sls|wc|less|jq|sort|uniq|awk|sed|cut|tr)\b/i.test(parts[1])) continue;
+    // piped into another program (head, grep, node script.js…): that program decides what's printed. Only when every
+    // program after the pipe passes all lines through (sort, tee, cat…) does the whole file still get dumped.
+    if (parts.length > 1 && parts.slice(1).some(p => !PASS.test(p))) continue;
     if (/-(TotalCount|Tail|First|Last|Head)\b/i.test(first)) continue;
     for (const raw of m[1].match(/"[^"]+"|'[^']+'|\S+/g) || []) {
-      const f = path.resolve(dir, raw.replace(/^["']|["']$/g, '').replace(/^~(?=$|[\\/])/, os.homedir()));
+      const f = toPath(dir, raw);
       if (SKIP.test(f)) continue;
       let s; try { s = measure(f); } catch { continue; } if (!s) continue;
       if (s.lines > MAX_LINES || s.bytes > MAX_BYTES) {

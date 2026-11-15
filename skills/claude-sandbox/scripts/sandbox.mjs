@@ -27,16 +27,20 @@ const docker = (a, opts = {}) => spawnSync('docker', a, { encoding: 'utf8', ...o
 const die = m => { console.error('✘ ' + m); process.exit(1); };
 
 if (docker(['info', '--format', '{{.ServerVersion}}']).status !== 0) die('Docker is not running. Start Docker Desktop (or the docker service) and try again.');
-if (!fs.existsSync(project) || !fs.statSync(project).isDirectory()) die(`not a folder: ${project}`);
+const rebuildOnly = flag('--rebuild') && !args.some(a => !a.startsWith('--')); // no folder given: nothing gets mounted
+if (!rebuildOnly && (!fs.existsSync(project) || !fs.statSync(project).isDirectory())) die(`not a folder: ${project}`);
 const home = path.resolve(process.env.HOME || process.env.USERPROFILE || '/');
-if (project === home || project === path.parse(project).root) die(`refusing to mount ${project}: that exposes your whole ${project === home ? 'home folder' : 'drive'}. Pick a project folder.`);
+// the home folder or any folder above it (C:\Users, /home), compared case-insensitively on Windows
+const key = p => process.platform === 'win32' ? p.toLowerCase() : p;
+const holdsHome = key(home) === key(project) || key(home).startsWith(key(project).replace(/[\\/]$/, '') + path.sep);
+if (!rebuildOnly && (holdsHome || project === path.parse(project).root)) die(`refusing to mount ${project}: that exposes your whole ${project === path.parse(project).root ? 'drive' : 'home folder'}. Pick a project folder.`);
 
 // build image if needed
 if (flag('--rebuild') || docker(['image', 'inspect', IMAGE]).status !== 0) {
   console.log(`building ${IMAGE} (first run takes a minute)…`);
   const b = spawnSync('docker', ['build', '-t', IMAGE, here], { stdio: 'inherit' });
   if (b.status !== 0) die('docker build failed');
-  if (flag('--rebuild') && !args.some(a => !a.startsWith('--'))) process.exit(0);
+  if (rebuildOnly) process.exit(0);
 }
 
 const run = [

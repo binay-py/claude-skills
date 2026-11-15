@@ -9,13 +9,17 @@ Writes <out> and <out-stem>.preview.png (full size next to the 168x94 YouTube se
 Requires: pip install pillow
 """
 import argparse
+import functools
 import itertools
 import math
 import re
+import subprocess
 import sys
+import tempfile
+import unicodedata
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageEnhance, ImageOps, features
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fonts import font as find_font  # noqa: E402
@@ -246,6 +250,99 @@ def emoji_image(ch, size):
     return em
 
 
+# ---------------------------------------------------------------- fonts that can draw the text
+DEVA = re.compile("[\u0900-\u097F]")
+
+
+def missing_glyphs(path, text):
+    """Characters this font would draw as its empty "tofu" box."""
+    f = ImageFont.truetype(path, 40)
+
+    def ink(c):
+        im = Image.new("L", (90, 90), 0)
+        ImageDraw.Draw(im).text((20, 20), c, font=f, fill=255)
+        return im.tobytes()
+    tofu = ink("\U0010FFFD")  # a code point no font has
+    return [c for c in dict.fromkeys(text)
+            if not c.isspace() and unicodedata.category(c) not in ("Mn", "Me", "Cf") and ink(c) == tofu]
+
+
+def text_font(text, path):
+    """`path`, or a Devanagari font when `path` has no Devanagari (Impact and Segoe UI draw boxes)."""
+    if text and DEVA.search(text) and any(DEVA.match(c) for c in missing_glyphs(path, text)):
+        try:
+            return find_font("devanagari")
+        except FileNotFoundError:
+            pass
+    return path
+
+
+# ---------------------------------------------------------------- complex-script shaping through ffmpeg
+REF = 200     # title words are measured once at this size; layout scales the numbers
+SHAPED = {}   # title word -> (ink width, height above, depth below the baseline) at REF, when ffmpeg shapes the title
+
+
+@functools.lru_cache(None)
+def ffmpeg_shapes():
+    """ffmpeg's drawtext shapes with HarfBuzz (conjuncts, the short-i matra before its consonant); Pillow needs raqm."""
+    try:
+        return "libharfbuzz" in subprocess.run(["ffmpeg", "-hide_banner", "-buildconf"], capture_output=True, text=True).stdout
+    except OSError:
+        return False
+
+
+def needs_shaping(text):
+    return bool(text) and bool(DEVA.search(text)) and not features.check("raqm") and ffmpeg_shapes()
+
+
+@functools.lru_cache(None)
+def shaped(text, path, size, stroke=0):
+    """Text shaped by ffmpeg as coverage masks: (fill, fill + outline, crop offset from the ink's left edge and from
+    the baseline, ink width, ink height above and depth below the baseline)."""
+    words = text.split()
+    if len(words) > 1:  # drawtext shapes a whole line in its first letter's script: shape word by word, then join
+        sp, x, parts = ImageFont.truetype(path, size).getlength(" "), 0, []
+        for w in words:
+            parts.append((x, shaped(w, path, size, stroke)))
+            x += parts[-1][1][4] + sp
+        L, T = min(x0 + p[2] for x0, p in parts), min(p[3] for _, p in parts)
+        size_ = (round(max(x0 + p[2] + p[0].width for x0, p in parts) - L), max(p[3] + p[0].height for _, p in parts) - T)
+        masks = []
+        for k in (0, 1) if stroke else (0,):
+            m = Image.new("L", size_, 0)
+            for x0, p in parts:
+                one = Image.new("L", size_, 0)
+                one.paste(p[k], (round(x0 + p[2] - L), p[3] - T))
+                m = ImageChops.lighter(m, one)
+            masks.append(m)
+        return (masks[0], masks[1] if stroke else None, L, T, x - sp,
+                max(p[5] for _, p in parts), max(p[6] for _, p in parts))
+    pad = size + stroke
+    W, H, base = int(len(text) * size * 1.2) + 4 * pad, 3 * pad + size, 2 * pad
+    with tempfile.TemporaryDirectory() as td:
+        tf, out = Path(td, "t.txt"), Path(td, "t.png")
+        tf.write_text(text, encoding="utf-8")
+        esc = lambda q: str(q).replace("\\", "/").replace(":", "\\:")  # noqa: E731
+        dt = lambda x, b: (f"drawtext=fontfile='{esc(path)}':textfile='{esc(tf)}':fontsize={size}:fontcolor=white:"  # noqa: E731
+                           f"borderw={b}:bordercolor=white:x={x}:y={base}:y_align=baseline")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=black:s={2 * W}x{H}", "-vf",
+                        f"{dt(pad, 0)},{dt(W + pad, stroke)},format=gray", "-frames:v", "1", str(out)], check=True, capture_output=True)
+        im = Image.open(out)
+        im.load()
+    fill, line = im.crop((0, 0, W, H)), im.crop((W, 0, 2 * W, H))
+    fb = fill.getbbox()
+    box = line.getbbox() if stroke else fb
+    return (fill.crop(box), line.crop(box) if stroke else None, box[0] - fb[0], box[1] - base,
+            fb[2] - fb[0], base - fb[1], fb[3] - base)
+
+
+def paste_shaped(img, x, y, sh, fill, line=None):
+    """Draws shaped() text with its ink starting at x and its baseline at y."""
+    for mask, color in ((sh[1], line), (sh[0], fill)):
+        if mask is not None and color is not None:
+            img.paste(Image.new(img.mode, mask.size, color), (round(x + sh[2]), round(y + sh[3])), mask)
+
+
 # ---------------------------------------------------------------- title fitting
 def parse_title(title, upper):
     """'*word*' marks the highlighted keyword(s). Highlighted phrases stay on one line."""
@@ -263,9 +360,13 @@ def parse_title(title, upper):
 class Metrics:
     def __init__(self, path, size, hl_mode):
         self.f = ImageFont.truetype(path, size)
+        self.path = path
         self.size = size
         self.cap = -self.f.getbbox("H", anchor="ls")[1]
         self.desc = max(0, self.f.getbbox("gjpqy", anchor="ls")[3])
+        if SHAPED:  # ffmpeg-shaped title: the words' real ink height (matras above, marks below)
+            self.cap = round(max(v[1] for v in SHAPED.values()) * size / REF)
+            self.desc = round(max(v[2] for v in SHAPED.values()) * size / REF)
         self.stroke = max(3, round(size * 0.075))
         self.shadow = max(3, round(size * 0.055))
         self.space = self.f.getlength(" ") * 1.05
@@ -274,7 +375,8 @@ class Metrics:
         self.gap = max(round(self.cap * 0.2), 2 * self.pady + round(self.stroke * 1.2))
 
     def tok_w(self, t, hl):
-        return self.f.getlength(t) + (2 * self.padx if hl and self.padx else 2 * self.stroke)
+        w = SHAPED[t][0] * self.size / REF if t in SHAPED else self.f.getlength(t)
+        return w + (2 * self.padx if hl and self.padx else 2 * self.stroke)
 
     def line_w(self, line):
         return sum(self.tok_w(t, hl) for t, hl in line) + self.space * (len(line) - 1) + self.shadow
@@ -334,6 +436,8 @@ def draw_title(img, tokens_lines, m, x0, y0, box_w, align, P, hl_mode):
     for x, y, t, hl, tw in placed:
         if hl and hl_mode == "box":
             sd.rounded_rectangle((x, y - m.cap - m.pady, x + tw, y + m.pady + m.desc_used), radius=m.pady, fill=255)
+        elif t in SHAPED:
+            paste_shaped(soft, x + m.stroke, y, shaped(t, m.path, m.size, m.stroke), None, 255)
         else:
             sd.text((x + m.stroke, y), t, font=m.f, anchor="ls", fill=255, stroke_width=m.stroke, stroke_fill=255)
     soft = soft.filter(ImageFilter.GaussianBlur(m.size * 0.07)).point(lambda v: int(v * 0.45))
@@ -344,14 +448,22 @@ def draw_title(img, tokens_lines, m, x0, y0, box_w, align, P, hl_mode):
     for x, y, t, hl, tw in placed:
         if hl and hl_mode == "box":
             d.rounded_rectangle((x + o, y - m.cap - m.pady + o, x + tw + o, y + m.pady + m.desc_used + o), radius=m.pady, fill=shadow_c)
+        elif t in SHAPED:
+            paste_shaped(img, x + m.stroke + o, y + o, shaped(t, m.path, m.size, m.stroke), None, shadow_c)
         else:
             d.text((x + m.stroke + o, y + o), t, font=m.f, anchor="ls", fill=shadow_c, stroke_width=m.stroke, stroke_fill=shadow_c)
     for x, y, t, hl, tw in placed:
         if hl and hl_mode == "box":
             d.rounded_rectangle((x, y - m.cap - m.pady, x + tw, y + m.pady + m.desc_used), radius=m.pady, fill=hl_bg)
-            d.text((x + m.padx, y), t, font=m.f, anchor="ls", fill=hl_fg)
+            if t in SHAPED:
+                paste_shaped(img, x + m.padx, y, shaped(t, m.path, m.size), hl_fg)
+            else:
+                d.text((x + m.padx, y), t, font=m.f, anchor="ls", fill=hl_fg)
         else:
             c = hl_bg if hl else fill_c
+            if t in SHAPED:
+                paste_shaped(img, x + m.stroke, y, shaped(t, m.path, m.size, m.stroke), c, stroke_c)
+                continue
             d.text((x + m.stroke, y), t, font=m.f, anchor="ls", fill=c, stroke_width=m.stroke, stroke_fill=stroke_c)
     xs = [p[0] for p in placed]
     return (min(xs), y0, max(p[0] + p[4] for p in placed) + o, y0 + m.block_h(len(tokens_lines), m.desc_used > 0))
@@ -359,22 +471,28 @@ def draw_title(img, tokens_lines, m, x0, y0, box_w, align, P, hl_mode):
 
 def pill(img, text, x, y, max_w, size, P, align, box_w, font_path):
     d = ImageDraw.Draw(img)
+    sh = shaped(text, font_path, REF) if needs_shaping(text) else None
     while True:
         f = ImageFont.truetype(font_path, size)
-        tw = f.getlength(text)
+        tw = sh[4] * size / REF if sh else f.getlength(text)
         padx, pady = size * 0.6, size * 0.32
         if tw + 2 * padx <= max_w or size <= 12:
             break
         size -= 2
     asc = -f.getbbox("Hg", anchor="ls")[1]
     desc = f.getbbox("Hg", anchor="ls")[3]
+    if sh:
+        asc, desc = round(sh[5] * size / REF), round(sh[6] * size / REF)
     w, h = tw + 2 * padx, asc + desc + 2 * pady
     if align == "center":
         x = x + (box_w - w) / 2
     o = max(3, round(size * 0.12))
     d.rounded_rectangle((x + o, y + o, x + w + o, y + h + o), radius=h / 2, fill=tuple(int(c * 0.35) for c in rgb(P["stroke"])))
     d.rounded_rectangle((x, y, x + w, y + h), radius=h / 2, fill=rgb(P["pill_bg"]))
-    d.text((x + padx, y + pady + asc), text, font=f, anchor="ls", fill=rgb(P["pill_fg"]))
+    if sh:
+        paste_shaped(img, x + padx, y + pady + asc, shaped(text, font_path, size), rgb(P["pill_fg"]))
+    else:
+        d.text((x + padx, y + pady + asc), text, font=f, anchor="ls", fill=rgb(P["pill_fg"]))
     return (x, y, x + w, y + h), asc
 
 
@@ -515,8 +633,14 @@ def build(a):
     tokens = parse_title(a.title, not a.keep_case)
     if not tokens:
         sys.exit("empty title")
-    lower = a.keep_case
-    tf = a.font or find_font("title")
+    lower = a.keep_case or bool(DEVA.search(a.title))  # Devanagari has no case but has marks below the line (like descenders)
+    tf = a.font or text_font(a.title, find_font("title"))
+    sub_font = text_font(a.subtitle, find_font("bold"))
+    SHAPED.clear()
+    if needs_shaping(a.title):
+        SHAPED.update({t: shaped(t, tf, REF)[4:] for t, _ in tokens})
+    if needs_shaping(a.title) or needs_shaping(a.subtitle):
+        notes.append("Devanagari shaped with ffmpeg/HarfBuzz (this Pillow has no raqm)")
     bx0, by0, bx1, by1 = text_box
     box_w, box_h = bx1 - bx0, by1 - by0
     sub_h = 0
@@ -533,7 +657,7 @@ def build(a):
     sub_info = None
     if a.subtitle:
         sub_size = int(min(W, H) * 0.058)
-        sub_info = pill(img, a.subtitle, bx0, gy + tb_h + min(W, H) * 0.04, box_w, sub_size, P, align, box_w, find_font("bold"))
+        sub_info = pill(img, a.subtitle, bx0, gy + tb_h + min(W, H) * 0.04, box_w, sub_size, P, align, box_w, sub_font)
     if front:  # the person stands in front of the text
         img.paste(front[0], front[1], front[0])
     if shot and a.arrow and shot[2]:
@@ -601,6 +725,13 @@ def build(a):
     spread = (max(inside) - min(inside)) / 255 if inside else 0
     if spread < 0.18:
         warns.append(f"squint test: the title area is nearly flat when blurred ({spread:.2f}); it won't pop in the feed")
+    for label, txt, fp in (("title", a.title, tf), ("subtitle", a.subtitle, sub_font)):
+        miss = missing_glyphs(fp, txt) if txt else []
+        if miss:
+            warns.append(f"{Path(fp).name} can't draw {' '.join(miss)} in the {label} (drawn as boxes): use --emoji for an emoji, or --font")
+    shown = (a.title or "") + (a.subtitle or "")
+    if DEVA.search(shown) and re.search("[\u093F\u094D]", shown) and not features.check("raqm") and not ffmpeg_shapes():
+        warns.append("this Pillow has no raqm text shaping (it needs FriBiDi) and no ffmpeg with HarfBuzz was found, so Devanagari conjuncts and the short-i matra render wrong: check the preview")
     if a.subtitle and sub_info and sub_info[1] * scale < 5:
         notes.append(f"subtitle is {sub_info[1] * scale:.1f}px tall in search results: fine as a secondary line, unreadable there")
     report = [

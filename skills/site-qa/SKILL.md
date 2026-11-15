@@ -18,13 +18,14 @@ Output in `--out` (default `qa-report/`): `report.md` (issues by severity, then 
 
 ## How to use the report
 - Read `report.md` and LOOK at both screenshots. Many layout problems only show up visually.
-- **High** = broken for users: page errors, JS exceptions, failed requests, broken images, sideways scroll on mobile, no viewport tag. Fix these first.
+- **High** = broken for users: page errors, JS exceptions, failed requests, broken images, broken links (to pages, same-site files like PDFs, and outbound), sideways scroll on mobile, no viewport tag. Fix these first.
 - **Medium** = hurts reach or accessibility: missing description or Open Graph tags (plain WhatsApp/Facebook link previews), missing `<h1>`, images without alt, unlabeled inputs, pages over 3 MB or slower than 8 s.
 - **Low** = polish: lang attribute, favicon, duplicate titles, tiny tap targets, empty links.
-- "Outbound link refused the checker" means the site blocks bots (LinkedIn, Instagram and others do). Check those by hand; they aren't proven broken.
+- "Link refused the checker" means the site blocks bots (LinkedIn, Instagram and others do). Check those by hand; they aren't proven broken.
 - When fixing issues, re-run against the same URL to confirm. After a deploy, run it against the live URL, not localhost.
 
 ## Notes
 - Each page loads twice, once at desktop and once at mobile size with a mobile user agent. Errors seen only on mobile are labeled as such.
-- It crawls only same-origin links found in `<a href>`. Pages reachable only through JS navigation or forms won't be found. Pass their URLs as separate runs.
+- It crawls only same-origin links found in `<a href>`. Pages reachable only through JS navigation or forms won't be found. Pass their URLs as separate runs. If the start URL redirects (http → https, apex → www), the crawl follows the final origin.
+- Linked same-site files (PDFs, images, feeds) are checked with a plain request, also under `--no-external`; up to 100 such and outbound links per run.
 - It never submits forms or clicks buttons, so it's safe to run against production.

@@ -10,12 +10,12 @@ description: Check how a URL looks when shared on WhatsApp, LinkedIn, X/Twitter,
 ```
 node preview-check.mjs https://example.com
 node preview-check.mjs https://example.com /about /pricing /blog/post-1    # several routes (catches SPA duplicates)
-node preview-check.mjs --sitemap https://example.com/sitemap.xml            # up to 50 URLs
+node preview-check.mjs --sitemap https://example.com/sitemap.xml            # up to 50 URLs (follows a sitemap index)
 node preview-check.mjs https://example.com --out previews.html
 ```
 
 It prints problems (✘) and warnings (!) per URL and exits 1 if there are problems. It also writes `link-preview.html` with approximate WhatsApp, LinkedIn, X and Facebook cards. Open it and look.
-In Git Bash on Windows, set `MSYS_NO_PATHCONV=1` or pass full URLs; otherwise `/about` is rewritten into a file path.
+In Git Bash on Windows, MSYS rewrites `/about` into a file path; the script undoes that (a one-letter path like `/p` comes back as `/p/`). Full URLs or `MSYS_NO_PATHCONV=1` always work.
 
 ## Always check several routes
 Pass the home page **and** 2–3 inner pages. The most common failure on modern sites: a single-page app ships one `index.html`, so every route has the homepage's title and image, and the real titles are set by JavaScript, which crawlers never run.

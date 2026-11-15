@@ -64,10 +64,11 @@ const list = s => (s || '').split(',').map(x => x.trim()).filter(Boolean);
 const matcher = pats => pats.map(p => ({ p, re: globToRe(p), base: !p.includes('/') }));
 const hit = (ms, rel) => ms.some(m => m.re.test(m.base ? path.posix.basename(rel) : rel) || (m.base && rel.split('/').slice(0, -1).some(seg => m.re.test(seg))));
 
-// Never uploaded unless named in --include. Folders match at any depth.
+// Never uploaded unless --include names the exact file path (a wildcard or folder in --include doesn't pull them in).
+// Folders match at any depth.
 const DEFAULT_EXCLUDE = [
   '.git', '.github', '.vscode', '.idea', 'node_modules', '.wrangler', '.cache', '.next', '.svelte-kit', '__pycache__',
-  '.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', '*.sqlite', '*.db', '*.log',
+  '.env', '.env.*', '.dev.vars', '.dev.vars.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', '*.sqlite', '*.db', '*.log',
   '.DS_Store', 'Thumbs.db', 'desktop.ini', '*.swp', '*~',
   'package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', 'tsconfig*.json',
   'wrangler.toml', 'wrangler.json', 'wrangler.jsonc', 'README*', 'LICENSE*', 'CHANGELOG*', '*.md',
@@ -114,8 +115,11 @@ if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) die(`--dir ${dir} is
 step(`staging ${dir}`);
 const inc = include && matcher(list(include)), exc = matcher([...DEFAULT_EXCLUDE, ...list(extraExclude)]);
 const all = walk(dir);
-const files = all.filter(rel => inc ? hit(inc, rel) : !hit(exc, rel));
-const skipped = all.filter(f => !files.includes(f));
+// --include picks files, but default-excluded ones (node_modules/**, .env, keys…) and --exclude still apply
+// unless --include names that exact path: "*.js" must not pull in node_modules.
+const named = new Set(list(include).map(p => p.replace(/^\.\//, '').toLowerCase()));
+const files = all.filter(rel => inc ? hit(inc, rel) && (!hit(exc, rel) || named.has(rel.toLowerCase())) : !hit(exc, rel));
+const kept = new Set(files), skipped = all.filter(f => !kept.has(f));
 if (!files.length) die('nothing to deploy after filtering');
 if (!files.some(f => /(^|\/)index\.html$/i.test(f))) console.warn('  ! no index.html — the site root will 404');
 
@@ -137,8 +141,9 @@ if (skipped.length) console.log('  left out: ' + [...new Set(skipped.map(f => f.
 step('scanning for secrets');
 const findings = [];
 for (const rel of files) {
-  if (!TEXT_EXT.test(rel) && !/^[^.]+$/.test(path.posix.basename(rel))) continue;
-  const text = fs.readFileSync(path.join(stage, rel), 'utf8');
+  const buf = fs.readFileSync(path.join(stage, rel));
+  if (!TEXT_EXT.test(rel) && buf.subarray(0, 8192).includes(0)) continue; // binary (images, fonts, wasm); any other file is scanned (.ts, .py, .dev.vars…)
+  const text = buf.toString('utf8');
   for (const [re, what] of SECRET_PATTERNS) {
     const m = text.match(re);
     if (m) findings.push(`${rel}: ${what} (${m[0].slice(0, 8)}…)`);

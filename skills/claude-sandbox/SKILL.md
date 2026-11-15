@@ -26,7 +26,7 @@ node sandbox.mjs --rebuild                # update Claude Code inside the image
 | Keeps | its own login and settings in the Docker volume `claude-sandbox-home` (log in once inside; `ANTHROPIC_API_KEY` is passed through if set) |
 | Network | normal outbound access (needed for the API, npm, git). `--no-network` cuts it entirely |
 
-It refuses to mount your home folder or a drive root.
+It refuses to mount your home folder, a folder above it (`C:\Users`, `/home`) or a drive root.
 
 ## Tell the user
 - `--yolo` is only reasonable *because* of the container: Claude can wreck `/workspace` but nothing else. Commit or back up first, or use git so mistakes are one `git checkout` away.

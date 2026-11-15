@@ -48,5 +48,7 @@ Exit code 1 on any warning. LOOK at the preview sheet before using the image.
 - No background removal: pass a PNG that is already cut out (remove.bg, Photoshop, macOS "Copy Subject").
 - Circles and arrows are placed from your `--circle` numbers: check the preview and adjust x/y/r if the oval misses.
 - Fonts: Impact for titles (Windows/macOS; on Linux install `ttf-mscorefonts` or set `FONT_TITLE=/path/Anton-Regular.ttf`). Override with `FONT_TITLE`, `FONT_BOLD`, `FONT_EMOJI`.
+- Devanagari (Hindi/Nepali) titles and subtitles switch to Mangal Bold / Nirmala UI automatically (`FONT_DEVANAGARI` overrides). Pillow without raqm (stock Windows) can't join conjuncts or place the short-i matra, so that text is shaped by ffmpeg's drawtext (HarfBuzz) word by word and composited in; mixed English + Nepali titles work. With no ffmpeg built with libharfbuzz on PATH the check warns instead, so read the preview.
+- Characters the font can't draw (an emoji typed into `--title`, for example) are reported as a warning instead of silently becoming boxes.
 - Emoji: single-codepoint only (Pillow without libraqm can't join ZWJ sequences).
 - No face detection: crop photos so the face isn't near an edge.

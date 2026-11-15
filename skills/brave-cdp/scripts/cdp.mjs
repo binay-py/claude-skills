@@ -18,7 +18,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const RELAY_PORT = Number(process.env.CDP_RELAY_PORT || 9333);
-const TOKEN_FILE = path.join(os.homedir(), '.cdp-relay-token');
+// one token file per relay port, so a second relay (or a test one) never overwrites a running relay's token
+const TOKEN_FILE = path.join(os.homedir(), RELAY_PORT === 9333 ? '.cdp-relay-token' : `.cdp-relay-token-${RELAY_PORT}`);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ---------- finding the browser ----------
@@ -103,7 +104,10 @@ class RelayCDP {
     const token = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
     try {
       const r = await fetch(`http://127.0.0.1:${RELAY_PORT}/health`, { headers: { 'x-relay-token': token }, signal: AbortSignal.timeout(800) });
-      if (r.ok) return new RelayCDP(token);
+      if (!r.ok) return null;
+      // CDP_URL / CDP_BROWSER / CDP_PORT pick a browser: only use the relay if it is connected to that one
+      const want = process.env.CDP_URL || process.env.CDP_BROWSER || process.env.CDP_PORT ? await findEndpoint().catch(() => null) : null;
+      if (!want || (await r.json()).url === want) return new RelayCDP(token);
     } catch {}
     return null;
   }
@@ -256,9 +260,8 @@ export async function downloadsTo(cdp, dir) {
 
 // ---------- relay server ----------
 async function relay() {
-  const cdp = await CDP.connect();
+  const url = await findEndpoint(), cdp = await CDP.connect(url);
   const token = crypto.randomBytes(24).toString('hex');
-  fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
   const events = []; let seq = 0; const waiters = new Set();
   cdp.on(m => { events.push({ seq: ++seq, ...m }); if (events.length > 5000) events.shift(); for (const w of waiters) w(); });
   const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -266,7 +269,7 @@ async function relay() {
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x');
     if (req.headers.host !== `127.0.0.1:${RELAY_PORT}` || req.headers['x-relay-token'] !== token) return json(res, 403, { ok: false, error: 'forbidden' });
-    if (u.pathname === '/health') return json(res, 200, { ok: true });
+    if (u.pathname === '/health') return json(res, 200, { ok: true, url });
     if (u.pathname === '/send' && req.method === 'POST') {
       let body = ''; for await (const c of req) body += c;
       try { const { method, params, sessionId } = JSON.parse(body); json(res, 200, { ok: true, result: await cdp.send(method, params, sessionId) }); }
@@ -286,10 +289,15 @@ async function relay() {
     }
     json(res, 404, { ok: false, error: 'not found' });
   });
-  server.listen(RELAY_PORT, '127.0.0.1', () => console.log(`relay up on 127.0.0.1:${RELAY_PORT} (token in ${TOKEN_FILE}). Ctrl+C to stop.`));
-  const stop = () => { try { fs.unlinkSync(TOKEN_FILE); } catch {} process.exit(0); };
+  // The token file is written only once the port is ours: a relay that can't listen must not replace a running relay's token.
+  server.on('error', e => { console.error(`relay could not listen on 127.0.0.1:${RELAY_PORT}: ${e.code === 'EADDRINUSE' ? 'a relay (or something else) is already running there' : e.message}`); process.exit(1); });
+  server.listen(RELAY_PORT, '127.0.0.1', () => {
+    fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
+    console.log(`relay up on 127.0.0.1:${RELAY_PORT} (token in ${TOKEN_FILE}). Ctrl+C to stop.`);
+  });
+  const stop = () => { try { if (fs.readFileSync(TOKEN_FILE, 'utf8') === token) fs.unlinkSync(TOKEN_FILE); } catch {} process.exit(0); };
   cdp.onclose = () => { console.log('browser connection closed'); stop(); };
-  process.on('SIGINT', stop); process.on('SIGTERM', stop);
+  for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, stop);
 }
 
 // ---------- CLI ----------
@@ -306,9 +314,10 @@ async function main() {
     if (cmd === 'tabs') for (const t of await tabs(cdp)) console.log(`${t.targetId}  ${t.title.slice(0, 60)}  ${t.url}`);
     if (cmd === 'eval') {
       const mi = rest.indexOf('--match'); const match = mi >= 0 ? rest[mi + 1] : undefined;
+      if (match && !(await tabs(cdp)).some(t => t.url.includes(match))) throw new Error(`no open tab's URL contains "${match}"`);
       const p = await page(cdp, { match });
-      console.log(JSON.stringify(await p.eval(rest[0]), null, 2));
-      if (!match) await p.close();
+      try { console.log(JSON.stringify(await p.eval(rest[0]), null, 2)); }
+      finally { await p.close(); } // closes the blank tab, or detaches from the matched one; also when the expression throws
     }
     if (cmd === 'run') {
       const job = await import(pathToFileURL(path.resolve(rest[0])).href);
@@ -327,4 +336,4 @@ async function main() {
   } finally { cdp.close(); }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(e => { console.error(e.message); process.exit(1); });
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(e => { console.error(e.message); process.exit(1); });

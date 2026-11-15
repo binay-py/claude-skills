@@ -21,7 +21,7 @@ const CHAINED = 'pre-commit.secret-guard-chained';
 const MAX_FILE = 2 * 1024 * 1024, MAX_LINE = 4000;
 
 // ---------- rules ----------
-// [regex, type, {generic}] — prefix rules only skip values containing "EXAMPLE" (AWS's documented key);
+// [regex, type, {generic}] — prefix rules only skip values containing "EXAMPLE" (AWS's documented key) or a run of x;
 // generic rules also skip placeholders, variable references and low-entropy values.
 const SECRETS = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY( BLOCK)?-----/, 'private key'],
@@ -43,7 +43,7 @@ const SECRETS = [
   [/\beyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}/, 'JWT'],
   [/\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|rediss|amqps?|mssql|sqlserver):\/\/[^\s:@/'"]+:([^\s@/'"]{3,})@/, 'database URL with password', { generic: true }],
   [/\bhttps?:\/\/[^\s:@/'"]+:([^\s@/'"]{6,})@/, 'URL with embedded password', { generic: true }],
-  [/\b(?:authorization|x-api-key|api-key)["']?\s*[:=]\s*["']?(?:bearer\s+|basic\s+|token\s+)?([A-Za-z0-9._~+/=-]{20,})/i, 'auth header', { generic: true }],
+  [/\b(?:authorization|x-api-key|api-key)["']?\s*[:=]\s*["'`]?(?:bearer\s+|basic\s+|token\s+)?([A-Za-z0-9._~+/=-]{20,})/i, 'auth header', { generic: true }],
   [/--(?:password|token|api-key|secret)[= ]["']?([^\s"'$]{8,})/i, 'secret passed as a flag', { generic: true }],
   // ENV-style: UPPER_CASE name with TOKEN/SECRET/PASSWORD/API_KEY…, then = or ": "
   [/(?:^|[\s;,{(])(?:export\s+)?["']?[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|APIKEY|PRIVATE_KEY|ACCESS_KEY|AUTH_KEY)[A-Z0-9_]*["']?\s*(?:=|:\s)\s*["']?([^\s"'#,;]{8,})/, 'secret assigned to a variable', { generic: true }],
@@ -66,7 +66,7 @@ export function findSecret(line) {
   for (const [re, type, o = {}] of SECRETS) {
     const m = line.match(re); if (!m) continue;
     const value = m[1] ?? m[0];
-    if (/example/i.test(value)) continue;
+    if (/example|x{6}/i.test(value)) continue; // AWS's documented key, docs placeholders like ghp_xxxxxxxx…
     if (type === 'private key') { // a one-line "BEGIN…XXXX…END" in docs is a placeholder; real keys are long
       const end = line.indexOf('-----END', m.index); const body = end > 0 ? line.slice(m.index + m[0].length, end) : '';
       if (end > 0 && (body.length < 200 || /x{4}|\.\.\./i.test(body))) continue;

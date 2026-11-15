@@ -19,10 +19,11 @@ It prints the top recommendations and writes a full markdown report:
 - **By project**, **Heaviest sessions** (with peak context size), **By model**, **By day**
 - **Tool output fed back into context**: which tools flood the context window (Read, Bash, MCP…)
 - **Biggest tool outputs**: the single results over ~5k tokens, with a preview so you can see what it was
-- **Loaded into every session**: CLAUDE.md sizes, MCP server count, installed-skill description size
+- **Loaded into every session**: CLAUDE.md sizes, MCP server count, description size of the skills in `~/.claude/skills` and in installed, enabled plugins
 
 ## Reading the results with the user
 - One API response is logged across several lines with the same usage. The script de-duplicates by message ID, so totals are not inflated.
+- Subagent (Agent tool) transcripts in `<session>/subagents/` are included and counted under the session that launched them. Peak context is the main thread's.
 - Cache reads cost ~10% of fresh input. A high hit rate (90%+) is good; long sessions are still expensive because *every* turn re-reads the whole context.
 - Recommendations, in order of usual impact: one task per session (`/clear`), `/compact` before continuing long work, trim noisy command output (`| tail -50`, `-q`), read files with offset/limit, use Sonnet/Haiku for routine work and subagents, remove unused MCP servers and skills, keep CLAUDE.md short.
 - "Cost" is the API-equivalent number Claude Code computes. On a subscription the user isn't billed that, but it tracks how fast they burn through limits.

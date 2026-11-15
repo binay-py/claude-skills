@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const argv = process.argv.slice(2);
-const roots = []; for (let i = 0; i < argv.length; i++) if (argv[i] === '--root') roots.push(path.resolve(argv[++i].replace(/^~/, os.homedir())));
+const roots = []; for (let i = 0; i < argv.length; i++) if (argv[i] === '--root') roots.push(path.resolve((argv[++i] || '.').replace(/^~/, os.homedir())));
 if (!roots.length) roots.push(process.cwd());
 const FIX = argv.includes('--fix'), APPLY = argv.includes('--apply');
 const HOME = path.join(os.homedir(), '.claude');
@@ -36,16 +36,18 @@ const SECRETS = [
   [/--(?:password|token|api-key|secret)[= ]["']?[^\s"'$]{8,}/i, 'secret passed as a flag'],
 ];
 const findSecret = s => { for (const [re, what] of SECRETS) { const m = s.match(re); if (m) return { what, sample: m[0].slice(0, 6) + '…' }; } return null; };
+// every match of every rule cut to 6 chars (keeps each regex's own flags: /i rules must redact "Authorization: Bearer …" too)
+const redact = s => SECRETS.reduce((t, [re]) => t.replace(new RegExp(re.source, re.flags + 'g'), m => m.slice(0, 6) + '…[redacted]'), s);
 const DANGEROUS_ALLOW = [
   [/^Bash(\(\*\)|\(:\*\)|\( \*\))?$/, 'allows EVERY shell command without asking'],
   [/^Bash\((sudo|doas)\b/, 'allows sudo'],
   [/^Bash\(rm\b(?!.*node_modules|.*dist|.*build)/, 'allows rm without asking'],
-  [/^Bash\(.*git push.*(--force|-f\b)/, 'allows force-push'], [/^Bash\(git push( \*|:\*)\)/, 'allows any git push (including --force)'],
+  [/^Bash\(.*git push.*(--force|-f\b)/, 'allows force-push'], [/^Bash\(git( push)?( \*|:\*)\)/, 'allows any git push (including --force)'],
   [/^Bash\(.*git (reset --hard|clean -[a-z]*f)/, 'allows discarding uncommitted work'],
   [/^Bash\((curl|wget|iwr|irm)\b.*\|\s*(ba|z)?sh/, 'allows piping downloads into a shell'],
   [/^Bash\((chmod|chown) -R/, 'allows recursive permission changes'],
   [/^Bash\((dd|mkfs|format|diskpart)\b/, 'allows disk-level commands'],
-  [/^Bash\((Remove-Item|del|rmdir|rd)\b/i, 'allows deleting files without asking (Windows)'],
+  [/^(Bash\((Remove-Item|del|rmdir|rd)|PowerShell\((Remove-Item|ri|rm|del|erase|rmdir|rd))\b/i, 'allows deleting files without asking (Windows)'],
   [/^PowerShell(\(\*\))?$/, 'allows EVERY PowerShell command without asking'],
   [/^Write(\(\*\*?\))?$|^Edit(\(\*\*?\))?$/, 'allows writing ANY file, including outside the project'],
 ];
@@ -72,7 +74,10 @@ function auditSettings(file, { userLevel }) {
   }
   if (perms.defaultMode === 'bypassPermissions') add('high', where, 'defaultMode is "bypassPermissions": Claude never asks before running anything');
   if (s.skipDangerousModePermissionPrompt) add('low', where, 'skipDangerousModePermissionPrompt is on: the warning before bypass mode is hidden');
-  if (perms.additionalDirectories?.some(d => /^(\/|~|[A-Z]:\\?)$/i.test(d.trim()))) add('high', where, 'additionalDirectories includes a filesystem or home root');
+  // /, ~, C:\ or C:/, //c/ (Claude Code's form), and the home folder written out in full
+  const abs = d => { let x = d.trim().replace(/^~(?=$|[\\/])/, os.homedir()); if (process.platform === 'win32') x = x.replace(/^\/\/?([A-Za-z])(?=[\\/]|$)/, '$1:'); return path.isAbsolute(x) ? path.resolve(x).toLowerCase() : null; };
+  const rootOrHome = d => /^(\/|~|\$HOME|[A-Z]:|\/\/?[A-Z])[\\/]*$/i.test(d.trim()) || abs(d) === path.resolve(os.homedir()).toLowerCase();
+  if (perms.additionalDirectories?.some(rootOrHome)) add('high', where, 'additionalDirectories includes a filesystem or home root');
   if (userLevel) {
     const deny = new Set(perms.deny || []);
     const missing = RECOMMENDED_DENY.filter(r => !deny.has(r));
@@ -141,14 +146,19 @@ console.log(`\n${count('high')} high · ${count('medium')} medium · ${count('lo
 // ---------- fixes ----------
 const fixes = findings.map(f => f.fix).filter(Boolean);
 if (!FIX) { if (fixes.length) console.log(`\n${fixes.length} fix(es) available: re-run with --fix to preview, --fix --apply to make them.`); process.exit(count('high') ? 1 : 0); }
-const backup = f => { if (fs.existsSync(f)) { const b = `${f}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`; fs.copyFileSync(f, b); return b; } };
+// A backup next to a file inside a git repo (settings.local.json with the secrets still in it) would be picked up
+// by the next `git add .`, so those go to ~/.claude/backups/ instead.
+const backup = f => { if (fs.existsSync(f)) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-'), inRepo = git(path.dirname(f), 'rev-parse', '--is-inside-work-tree').stdout.trim() === 'true';
+  const b = inRepo ? path.join(HOME, 'backups', `${path.resolve(f).replace(/[:\\/]+/g, '_')}.bak-${stamp}`) : `${f}.bak-${stamp}`;
+  fs.mkdirSync(path.dirname(b), { recursive: true }); fs.copyFileSync(f, b); return b; } };
 const byFile = new Map();
 for (const fx of fixes) {
   if (fx.type === 'remove-allow' || fx.type === 'add-deny') { const e = byFile.get(fx.file) || { remove: [], deny: [] }; fx.type === 'remove-allow' ? e.remove.push(fx.rule) : e.deny.push(...fx.rules); byFile.set(fx.file, e); }
 }
 console.log(`\n${APPLY ? 'Applying' : 'Would apply'} (dry run unless --apply):`);
 for (const [file, e] of byFile) {
-  for (const r of e.remove) console.log(`  - remove allow rule from ${short(file)}: ${findSecret(r) ? r.replace(findSecret(r) && new RegExp(SECRETS.find(([re]) => re.test(r))[0].source), m => m.slice(0, 6) + '…[redacted]') : r}`.slice(0, 220));
+  for (const r of e.remove) console.log(`  - remove allow rule from ${short(file)}: ${redact(r)}`.slice(0, 220));
   if (e.deny.length) console.log(`  - add ${e.deny.length} deny rules to ${short(file)}: ${e.deny.slice(0, 4).join(', ')}…`);
   if (APPLY) {
     const b = backup(file); const s = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};

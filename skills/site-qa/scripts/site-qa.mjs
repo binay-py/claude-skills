@@ -17,7 +17,7 @@ const opt = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i
 const start = argv.find(a => /^https?:\/\//.test(a));
 if (!start) { console.log('usage: node site-qa.mjs <url> [--max-pages 20] [--out qa-report] [--no-external] [--keep-query]'); process.exit(1); }
 const MAX = Number(opt('max-pages', 20)), OUT = path.resolve(opt('out', 'qa-report')), EXTERNAL = !argv.includes('--no-external'), KEEP_QUERY = argv.includes('--keep-query');
-const origin = new URL(start).origin;
+let origin = new URL(start).origin; // becomes the final origin if the start page redirects (http -> https, apex -> www)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ---------- browser ----------
@@ -113,7 +113,10 @@ async function launch() {
     if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); }
     else if (m.method) for (const l of listeners) l(m);
   };
-  const send = (method, params = {}, sessionId) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
+  // if the browser dies mid-run, fail with a message instead of Node's "unsettled top-level await" (exit 13)
+  let lost = null;
+  ws.onclose = () => { lost = new Error('lost the connection to the browser (did it crash?)'); for (const { rej } of pending.values()) rej(lost); pending.clear(); };
+  const send = (method, params = {}, sessionId) => { if (lost) return Promise.reject(lost); const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
   const close = () => br.close(send, ws);
   return { send, on: f => (listeners.add(f), () => listeners.delete(f)), close };
 }
@@ -128,11 +131,13 @@ async function audit(b, url, { width, height, mobile, shot }) {
   const off = b.on(m => {
     if (m.sessionId !== sessionId) return;
     const p = m.params;
-    if (m.method === 'Network.requestWillBeSent') { reqUrl.set(p.requestId, p.request.url); inflight++; lastNet = Date.now(); r.requests++; }
+    // a redirect re-sends the same requestId and gets one loadingFinished for all hops, so count it once
+    if (m.method === 'Network.requestWillBeSent') { reqUrl.set(p.requestId, p.request.url); if (!p.redirectResponse) inflight++; lastNet = Date.now(); r.requests++; }
     if (m.method === 'Network.responseReceived') {
       if (p.type === 'Document' && mainStatus === null) mainStatus = p.response.status;
       if (p.response.status >= 400 && p.type !== 'Document' && !/\/favicon\.ico(\?|$)/.test(p.response.url)) r.failed.push(`${p.response.status} ${p.response.url}`);
     }
+    if (m.method === 'Network.dataReceived') lastNet = Date.now();
     if (m.method === 'Network.loadingFinished') { r.bytes += p.encodedDataLength; inflight--; lastNet = Date.now(); }
     if (m.method === 'Network.loadingFailed') { inflight--; lastNet = Date.now(); if (!p.canceled && !/ERR_ABORTED|ERR_HTTP_RESPONSE_CODE_FAILURE/.test(p.errorText)) r.failed.push(`${p.errorText} ${reqUrl.get(p.requestId) || ''}`); }
     if (m.method === 'Runtime.exceptionThrown') r.consoleErrors.push('Uncaught ' + (p.exceptionDetails.exception?.description || p.exceptionDetails.text).split('\n')[0]);
@@ -141,12 +146,15 @@ async function audit(b, url, { width, height, mobile, shot }) {
     if (m.method === 'Page.loadEventFired') loaded = true;
   });
   await Promise.all(['Network.enable', 'Runtime.enable', 'Log.enable', 'Page.enable'].map(m => s(m)));
+  await s('Network.setCacheDisabled', { cacheDisabled: true }); // weigh every page cold, not minus what earlier pages cached
   await s('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });
   if (mobile) await s('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36' });
   const t0 = Date.now();
   await s('Page.navigate', { url });
-  while (Date.now() - t0 < 30000 && !(loaded && inflight <= 0 && Date.now() - lastNet > 800)) await sleep(150);
-  r.loadMs = Date.now() - t0; r.status = mainStatus;
+  // Some requests never report finishing (fetch keepalive / sendBeacon analytics, long-polls), which held every
+  // such page for the full 30 s. After load, 3 s with no network activity at all also counts as quiet.
+  while (Date.now() - t0 < 30000 && !(loaded && Date.now() - lastNet > (inflight <= 0 ? 800 : 3000))) await sleep(150);
+  r.loadMs = (loaded ? Math.min(Date.now(), lastNet + 800) : Date.now()) - t0; r.status = mainStatus;
   const ev = async e => (await s('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result.value;
   Object.assign(r, await ev(`(() => {
     const q = s => document.querySelector(s), meta = n => q('meta[name="' + n + '"],meta[property="' + n + '"]')?.content || '';
@@ -189,28 +197,34 @@ const norm = (u, page = true) => { const x = new URL(u); x.hash = ''; if (page &
 const isPage = u => new URL(u).origin === origin && !/\.(pdf|zip|png|jpe?g|gif|webp|svg|ico|mp4|mp3|webm|xml|json|txt|css|js)$/i.test(new URL(u).pathname);
 fs.mkdirSync(OUT, { recursive: true });
 const b = await launch();
-const pages = [], queue = [new URL(start).href.replace(/#.*$/, '')], seen = new Set(queue), external = new Set(), linkedFrom = new Map();
+const pages = [], queue = [new URL(start).href.replace(/#.*$/, '')], seen = new Set(queue), external = new Set(), linkedFrom = new Map(), landed = new Set();
 try {
   while (queue.length && pages.length < MAX) {
     const url = queue.shift();
+    if (landed.has(url)) continue; // already crawled as the redirect target of another URL
     process.stdout.write(`  [${pages.length + 1}/${Math.min(MAX, pages.length + 1 + queue.length)}] ${url}\n`);
     const r = await audit(b, url, { width: 1366, height: 900, mobile: false, shot: pages.length === 0 ? path.join(OUT, 'desktop.png') : null });
     const m = await audit(b, url, { width: 390, height: 844, mobile: true, shot: pages.length === 0 ? path.join(OUT, 'mobile.png') : null });
     r.mobileOverflowX = m.overflowX; r.mobileWideEls = m.wideEls; r.smallTapTargets = m.smallTapTargets; r.mobileConsoleErrors = m.consoleErrors.filter(e => !r.consoleErrors.includes(e));
     pages.push(r);
+    if (/^https?:/.test(r.finalUrl || '')) { // a redirect target (/dir -> /dir/, http -> https) is the same page: don't crawl it again
+      if (pages.length === 1) origin = new URL(r.finalUrl).origin;
+      seen.add(norm(r.finalUrl)); landed.add(norm(r.finalUrl));
+    }
     for (const l of r.links) {
       const n = norm(l);
       if (!linkedFrom.has(n)) linkedFrom.set(n, url);
       if (isPage(n)) { if (!seen.has(n)) { seen.add(n); queue.push(n); } }
-      else if (new URL(n).origin !== origin) external.add(n);
+      else external.add(n); // outbound links, plus same-site files (PDFs, images) that aren't crawled as pages
     }
   }
 } finally { await b.close(); }
 
 let ext = [];
-if (EXTERNAL && external.size) {
-  console.log(`  checking ${Math.min(external.size, 100)} outbound links`);
-  const list = [...external].slice(0, 100);
+const own = u => new URL(u).origin === origin; // same-site files are checked even with --no-external
+const list = [...external].filter(u => EXTERNAL || own(u)).sort((a, b) => own(b) - own(a)).slice(0, 100);
+if (list.length) {
+  console.log(`  checking ${list.length} link(s) that aren't crawled as pages`);
   for (let i = 0; i < list.length; i += 8) ext.push(...await Promise.all(list.slice(i, i + 8).map(checkExternal)));
 }
 
@@ -243,13 +257,13 @@ for (const p of pages) {
   if (p.bytes > 3e6) add('medium', u, `heavy page: ${(p.bytes / 1e6).toFixed(1)} MB transferred`);
   if (p.loadMs > 8000) add('medium', u, `slow: ${(p.loadMs / 1000).toFixed(1)} s until the network went quiet`);
 }
-for (const e of ext.filter(e => !e.ok)) add(e.botBlocked ? 'info' : 'high', linkedFrom.get(e.url), `${e.botBlocked ? 'outbound link refused the checker (check by hand)' : 'broken outbound link'}: ${e.status} ${e.url}`);
+for (const e of ext.filter(e => !e.ok)) add(e.botBlocked ? 'info' : 'high', linkedFrom.get(e.url), `${e.botBlocked ? 'link refused the checker (check by hand)' : own(e.url) ? 'broken link' : 'broken outbound link'}: ${e.status} ${e.url}`);
 
 const order = { high: 0, medium: 1, low: 2, info: 3 };
 issues.sort((a, b) => order[a[0]] - order[b[0]]);
 const count = s => issues.filter(i => i[0] === s).length;
 const short = u => u ? (u.startsWith(origin) ? u.slice(origin.length) || '/' : u) : '?';
-let md = `# Site QA: ${origin}\n\n${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · ${pages.length} page(s) crawled · ${ext.length} outbound link(s) checked\n\n`
+let md = `# Site QA: ${origin}\n\n${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · ${pages.length} page(s) crawled · ${ext.length} other link(s) checked\n\n`
   + `**${count('high')} high · ${count('medium')} medium · ${count('low')} low**` + (count('info') ? ` · ${count('info')} to check by hand` : '') + `\n\n`
   + `| Desktop | Mobile |\n|---|---|\n| ![desktop](desktop.png) | ![mobile](mobile.png) |\n\n## Issues\n\n`;
 if (!issues.length) md += 'No issues found.\n';

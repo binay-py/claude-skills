@@ -28,7 +28,7 @@ Common options: `--max-mb 5`, `--fps`, `--colors 256`, `--width`, `--loop 0` (fo
   @clear  @speed 30  @prompt ❯
   ```
   **Use real output.** Run the commands first and paste what they printed (trim paths, never include secrets).
-- **video**: ffmpeg trim (`--start`/`--dur`), `--crop W:H:X:Y`, `--speed`, `--text` caption (bold, outlined, bottom-centered), then the same palette pipeline.
+- **video**: ffmpeg trim (`--start`/`--dur`), `--crop W:H:X:Y`, `--speed`, `--text` caption (bold, outlined, bottom-centered, shrunk to fit the width; Devanagari works, but start a mixed caption with the Nepali word because ffmpeg shapes a line in its first letter's script; emoji are dropped because ffmpeg can't draw them), then the same palette pipeline.
 - **images**: each image is fitted onto a `--size` canvas (`--bg` color) with `--transition` (fade, slideleft, wipeleft, circleopen… any ffmpeg xfade).
 
 ## Making it look good (do this, not just "a GIF")
@@ -48,4 +48,4 @@ Common options: `--max-mb 5`, `--fps`, `--colors 256`, `--width`, `--loop 0` (fo
 ## Limits
 - GIF is 256 colors per frame; photos and video look worse than MP4. Offer `--mp4` (GitHub READMEs can't autoplay MP4 from the repo, but issues, PRs and most sites can).
 - html mode captures the page as rendered by headless Chromium; WebGL works but can be slow per frame. Audio is ignored.
-- Very long recordings (> 60 s) are capped; GIFs that long should be videos.
+- A terminal session's length is capped at 60 s (html and video take whatever `--dur` you give). GIFs that long should be videos.

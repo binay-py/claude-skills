@@ -185,7 +185,8 @@ if (opt.format !== 'md') die('--write only supports --format md');
 const file = path.resolve(cwd, opt.changelog);
 const HEADER = '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n';
 const exists = fs.existsSync(file);
-let text = exists ? fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : HEADER;
+const raw = exists ? fs.readFileSync(file, 'utf8') : '', crlf = raw.includes('\r\n'); // keep the file's line endings
+let text = exists ? raw.replace(/\r\n/g, '\n') : HEADER;
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const label = version || 'Unreleased';
 const hdrRe = new RegExp(`^## \\[?v?${esc(label)}\\]?(?=[\\s]|$)`, 'mi');
@@ -204,6 +205,6 @@ if (hdrRe.test(text)) {
 }
 if (next === text) { say('no change'); process.exit(0); }
 if (exists) { fs.copyFileSync(file, file + '.bak'); say(`backup: ${file}.bak`); }
-fs.writeFileSync(file, next);
+fs.writeFileSync(file, crlf ? next.replace(/\n/g, '\r\n') : next);
 say(`${exists ? 'updated' : 'created'} ${file} with ## [${label}]`);
 process.stdout.write(section);

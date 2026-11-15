@@ -14,7 +14,7 @@ node secret-guard.mjs scan-staged    # what the hook runs: added lines of the st
 node secret-guard.mjs scan [path]    # files git tracks in the working tree (optionally one folder)
 node secret-guard.mjs scan-history   # every commit on every branch: commit, file:line, type
 node secret-guard.mjs test 'API_KEY=…'   # what the rules say about one line or filename
-node tests/run.mjs                   # 90 tests: 54 rule cases + install/commit/chain/uninstall/history in throwaway repos
+node tests/run.mjs                   # 93 tests: 57 rule cases + install/commit/chain/uninstall/history in throwaway repos
 ```
 `install` copies the script into `.git/hooks/secret-guard.mjs`, so the hook keeps working if this skill folder moves. Running `install` again updates it in place. Exit codes: `scan` and `scan-history` return 1 when they find something, so they also work in CI.
 

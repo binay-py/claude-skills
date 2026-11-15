@@ -28,16 +28,18 @@ const git = (cwd, args, env) => spawnSync('git', args, { cwd, encoding: 'utf8', 
 // ---------- rules ----------
 // The current user's home, any user's home folder (C:\Users\<name>, /home/<name>, /Users/<name>, /root),
 // and the folders that hold them. Deeper paths (/home/alice/project) are NOT matched: TARGET requires the path to end here.
-const HOME_RE = String.raw`(~|\$HOME|"\$HOME"|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%|${os.homedir().replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').replace(/\\\\/g, '[\\\\/]')}|[A-Za-z]:[\\/]Users(?:[\\/][^\\/\s"';&|]+)?|/home(?:/[^/\s"';&|]+)?|/Users(?:/[^/\s"';&|]+)?|/root)`;
-const ROOT_RE = String.raw`(/|/\*|[A-Za-z]:[\\/]?\*?|\\\\)`;
-const TARGET = String.raw`["']?(${HOME_RE}|${ROOT_RE})[\\/]?["']?(\s|$|;|&|\|)`;
+const HOME_RE = String.raw`(~|\$HOME|"\$HOME"|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%|${os.homedir().replace(/[\\^$.*+?()[\]{}|]/g, '\\$&').replace(/\\\\/g, '[\\\\/]')}|[A-Za-z]:[\\/]Users(?:[\\/][^\\/\s"';&|]+)?|(?:/mnt)?/[A-Za-z]/Users(?:/[^/\s"';&|]+)?|/home(?:/[^/\s"';&|]+)?|/Users(?:/[^/\s"';&|]+)?|/root)`;
+const ROOT_RE = String.raw`(/|/\*|[A-Za-z]:[\\/]?\*?|\\\\|/mnt/[A-Za-z])`;
+const TARGET = String.raw`["']?(${HOME_RE}|${ROOT_RE})([\\/]\*?)?["']?(\s|$|;|&|\|)`;
+// Git Bash on Windows: /c is the C: drive (rm only: for rd/del, /s and /q are switches)
+const RM_TARGET = process.platform === 'win32' ? String.raw`(${TARGET}|["']?/[A-Za-z]([\\/]\*?)?["']?(\s|$|;|&|\|))` : TARGET;
+const RECURSE = String.raw`(?=.*\s-r(e(c(u(r(s(e)?)?)?)?)?)?(\s|$|:))`; // -Recurse anywhere, or its abbreviations (-r, -rec)
 // Block rules apply per command segment, only when the segment actually RUNS the program named
 // (so `git commit -m "mention mkfs"` passes, `rm -rf "$HOME"` and `bash -c "rm -rf ~"` don't).
 const BLOCK = [
-  [/^rm$/, new RegExp(String.raw`^rm\s+(-[a-zA-Z]*[rR][a-zA-Z]*\s+|--recursive\s+|-[a-zA-Z]*f[a-zA-Z]*\s+)*(-[a-zA-Z]*\s+)*` + TARGET), 'recursive delete of your home folder or a filesystem root'],
-  [/^(Remove-Item|rm|ri|del|erase|rd|rmdir)$/i, new RegExp(String.raw`^\S+\b[^;|&]*-Recurse[^;|&]*\s` + TARGET, 'i'), 'recursive delete of your home folder or a drive root'],
-  [/^(Remove-Item|ri)$/i, new RegExp(String.raw`^\S+\s+(-(Path|LiteralPath)\s+)?` + TARGET + String.raw`[^;|&]*-Recurse`, 'i'), 'recursive delete of your home folder or a drive root'],
-  [/^(rd|rmdir)$/i, new RegExp(String.raw`^\S+\s+/s\b[^;|&]*\s` + TARGET, 'i'), 'recursive delete of your home folder or a drive root'],
+  [/^rm$/, new RegExp(String.raw`^rm\s+(\S+\s+)*` + RM_TARGET), 'recursive delete of your home folder or a filesystem root'],
+  [/^(Remove-Item|rm|ri|del|erase|rd|rmdir)$/i, new RegExp('^' + RECURSE + String.raw`\S+\s+(\S+\s+)*` + TARGET, 'i'), 'recursive delete of your home folder or a drive root'],
+  [/^(rd|rmdir)$/i, new RegExp(String.raw`^(?=.*\s/s\b)\S+\s+(\S+\s+)*` + TARGET, 'i'), 'recursive delete of your home folder or a drive root'],
   [/^(mkfs(\.\w+)?|diskpart)$/i, /^/, 'disk formatting'],
   [/^dd$/, /\bof=\/dev\/(sd|nvme|disk|hd|mmcblk)/, 'raw write to a disk device'],
   [/^format$/i, /^format\s+[a-z]:/i, 'disk formatting'],
@@ -50,7 +52,7 @@ function segments(cmd) {
   const out = []; let cur = '', q = null;
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
-    if (q) { cur += c; if (c === q && cmd[i - 1] !== '\\') q = null; continue; }
+    if (q) { cur += c; if (c === q && (q === "'" || cmd[i - 1] !== '\\')) q = null; continue; } // no escapes inside '…'
     if (c === '"' || c === "'") { q = c; cur += c; continue; }
     if (c === '\n' || c === ';' || c === '|' || c === '&') { if (cur.trim()) out.push(cur.trim()); cur = ''; if ((c === '|' || c === '&') && cmd[i + 1] === c) i++; continue; }
     cur += c;
@@ -58,17 +60,19 @@ function segments(cmd) {
   if (cur.trim()) out.push(cur.trim());
   return out;
 }
-// second quoted form: PowerShell/cmd, where \" is not an escape (e.g. "... C:\")
-const tokens = s => (s.match(/"(?:[^"\\]|\\.)*"|"[^"]*"|'[^']*'|[^\s]+/g) || []).map(w => w.replace(/^"([\s\S]*)"$/, '$1').replace(/^'([\s\S]*)'$/, '$1'));
+// A word can mix quoted and bare parts ("$HOME"/build is one word). Second quoted form: PowerShell/cmd,
+// where \" is not an escape (e.g. "... C:\")
+const tokens = s => (s.match(/(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']+)+|"[^"]*"|\S+/g) || []).map(w => /^"[^"]*"$/.test(w) ? w.slice(1, -1) : w.replace(/"((?:[^"\\]|\\.)*)"|'([^']*)'/g, (m, a, b) => a ?? b));
 function blockReason(cmd, depth = 0) {
   if (/:\(\)\s*\{\s*:\|:&\s*\};:/.test(cmd)) return 'fork bomb';
   for (const seg of segments(cmd)) {
     let t = tokens(seg);
-    while (t.length && (PREFIXES.test(t[0]) || /^\w+=/.test(t[0]))) t = t.slice(1);
+    // skip sudo/env/VAR=x and their options (sudo -u root rm …, nice -n 5 rm …)
+    for (let pre = false; t.length && (PREFIXES.test(t[0]) || /^\w+=/.test(t[0]) || (pre && t[0].startsWith('-'))); pre = true) t = t.slice(pre && /^-[ugn]$/.test(t[0]) ? 2 : 1);
     if (!t.length) continue;
     const c0 = t[0].replace(/^.*[\\/]/, ''); // /bin/rm -> rm
     if (depth < 3) { // unwrap bash -c "…", powershell -Command "…", cmd /c …, eval …
-      const ci = t.findIndex(w => w === '-c'), pi = t.findIndex(w => /^-(c|command)$/i.test(w)), ki = t.findIndex(w => /^\/c$/i.test(w));
+      const ci = t.findIndex(w => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(w)), pi = t.findIndex(w => /^-(c|command)$/i.test(w)), ki = t.findIndex(w => /^\/c$/i.test(w));
       let inner = null;
       if (SHELLS.test(c0) && ci > 0) inner = t[ci + 1];
       else if (PWSH.test(c0) && pi > 0) inner = t.slice(pi + 1).join(' ');
@@ -81,21 +85,46 @@ function blockReason(cmd, depth = 0) {
   }
   return null;
 }
+const GIT = String.raw`\bgit(\s+(-[Cc]\s+\S+|--[\w-]+(=\S+)?))*\s+`; // git, git -C <dir>, git -c k=v, git --no-pager …
 const ASK = [
-  [/\bgit\s+push\b[^;|&]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)/, 'force-push rewrites remote history'],
-  [/\bgit\s+reset\s+--hard\b/, 'git reset --hard discards uncommitted work'],
-  [/\bgit\s+clean\s+-[a-zA-Z]*f/, 'git clean deletes untracked files'],
-  [/\bgit\s+(checkout|restore)\s+(--\s+)?\.(\s|$)/, 'discards all uncommitted changes'],
-  [/\bgit\s+(branch\s+-D|stash\s+(drop|clear))\b/, 'deletes a branch or stash'],
+  [new RegExp(GIT + String.raw`push\b[^;|&]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)`), 'force-push rewrites remote history'],
+  [new RegExp(GIT + String.raw`reset\b[^;|&]*\s--hard\b`), 'git reset --hard discards uncommitted work'],
+  [new RegExp(GIT + String.raw`clean\b[^;|&]*\s(-[a-zA-Z]*f|--force\b)`), 'git clean deletes untracked files'],
+  [new RegExp(GIT + String.raw`(checkout|restore)\s+(--\s+)?\.(\s|$)`), 'discards all uncommitted changes'],
+  [new RegExp(GIT + String.raw`(branch\s+-D|stash\s+(drop|clear))\b`), 'deletes a branch or stash'],
 ];
 // SQL is usually quoted (psql -c "DROP TABLE x"), so look inside quotes when a database client runs
 const SQL = /\b(drop\s+(database|table|schema)|truncate\s+table)\b/i;
 const DB_CLIENT = /\b(psql|mysql|mariadb|sqlite3|sqlcmd|duckdb|mongosh?|clickhouse-client|cockroach|supabase|prisma)\b/i;
-const DESTRUCTIVE = /\b(rm|rmdir|unlink|shred|mv|truncate|Remove-Item|Move-Item|Clear-Content|Set-Content|Out-File|ri|del|erase|rd|move|ren|rename)\b|\bfind\b[^;|&]*\s-delete\b|\bsed\s+(-[a-zA-Z]*i|--in-place)|\bperl\s+-[a-zA-Z]*i|\bgit\s+(reset|clean|checkout|restore|stash|rm|mv)\b|(^|[^0-9&>|])>\s*(?!\/dev\/null|&|\$null|nul\b)["']?[\w./~\\-]/i;
+const DESTRUCTIVE = /\b(rm|rmdir|unlink|shred|mv|truncate|Remove-Item|Move-Item|Clear-Content|Set-Content|Out-File|ri|del|erase|rd|move|ren|rename)\b|\bfind\b[^;|&]*\s-delete\b|\bsed\s+(-[a-zA-Z]*i|--in-place)|\bperl\s+-[a-zA-Z]*i|\bgit(\s+(-[Cc]\s+\S+|--[\w-]+(=\S+)?))*\s+(reset|clean|checkout|restore|stash|rm|mv)\b|(^|[^0-9&>|])>\s*(?!\/dev\/null|&|\$null|nul\b)["']?[\w./~\\-]/i;
 
 // Quoted text (grep patterns, commit messages, echo strings) shouldn't trigger snapshots or prompts.
 const unquote = cmd => cmd.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
+// A heredoc body is data unless a shell runs it: `git commit -F - <<EOF` or `cat > notes.md <<EOF` mentioning
+// "rm -rf ~" must not be blocked, while `bash <<EOF`, `ssh host <<EOF` and `cat <<EOF | sh` still are.
+const RUNS_INPUT = /^(sh|bash|zsh|dash|ksh|fish|powershell|pwsh|cmd|ssh|source|\.|eval|xargs|sudo|doas|su|env|exec|nohup|python\d?|py|node|perl|ruby)(\.exe)?$/i;
+function stripDataHeredocs(cmd) {
+  const lines = cmd.split('\n'), out = [];
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i]);
+    const h = lines[i].match(/<<(-?)\s*(['"]?)([\w.-]+)\2/);
+    if (!h) continue;
+    const seg = lines[i].slice(0, h.index).split(/&&|\|\||;|\|/).pop().trim();
+    const c0 = (tokens(seg)[0] || '').replace(/^.*[\\/]/, '');
+    const pipedToShell = /\|\s*(\S*[\\/])?(sudo\s+)?(sh|bash|zsh|dash|ksh|fish|pwsh|powershell|cmd|xargs)(\.exe)?\b/i.test(lines[i].slice(h.index));
+    if (!c0 || RUNS_INPUT.test(c0) || pipedToShell) continue; // keep the body: it gets executed
+    let j = i + 1;
+    while (j < lines.length && (h[1] ? lines[j].replace(/^\t+/, '') : lines[j]) !== h[3]) j++;
+    if (j >= lines.length) continue; // no closing delimiter: not a heredoc we understand, keep everything
+    i = j; out.push(lines[j]); // drop the body, keep the delimiter line
+  }
+  const stripped = out.join('\n');
+  // `cat > x.sh <<EOF … EOF` then `bash x.sh` / `./x.sh` / `source x` runs that body after all: keep it
+  if (stripped !== cmd && /(^|[;&|\n]\s*)(sudo\s+)?(((ba|z|da|k)?sh|source|\.|pwsh|powershell)(\.exe)?\s+[^-\s<]|\.{1,2}\/\S+)/im.test(stripped)) return cmd;
+  return stripped;
+}
 function classify(cmd) {
+  cmd = stripDataHeredocs(cmd);
   const why = blockReason(cmd); if (why) return { action: 'block', why };
   const bare = unquote(cmd);
   for (const [re, why] of ASK) if (re.test(bare)) return { action: 'ask', why };
@@ -108,12 +137,15 @@ function classify(cmd) {
 // destructive segments act on (resolved against the folder they run in).
 const DESTRUCTIVE_CMD = /^(sudo\s+)?(rm|rmdir|unlink|shred|mv|truncate|Remove-Item|ri|Move-Item|Clear-Content|Set-Content|del|erase|rd|move|ren|rename|sed|perl|find)$/i;
 function destructiveTargets(cwd, cmd) {
-  const words = s => (s.match(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s]+/g) || []).map(w => w.replace(/^["']|["']$/g, ''));
-  const resolve = (dir, p) => path.resolve(dir, p.replace(/^~(?=$|[\\/])/, os.homedir()).replace(/^\$HOME(?=$|[\\/])/, os.homedir()));
-  let dir = cwd; const out = new Set();
+  const words = tokens;
+  // Git Bash paths on Windows: /c/Users/x -> C:/Users/x, /tmp -> %TEMP%
+  const msys = p => process.platform !== 'win32' ? p : p.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:/').replace(/^\/tmp(?=\/|$)/, os.tmpdir().replace(/\\/g, '/'));
+  const resolve = (dir, p) => path.resolve(dir, msys(p.replace(/^~(?=$|[\\/])/, os.homedir()).replace(/^\$HOME(?=$|[\\/])/, os.homedir())));
+  let dir = cwd, gitDir = null; const out = new Set();
   for (const seg of cmd.split(/&&|\|\||;|\|(?!\|)|\n/)) {
     const w = words(seg.trim()); if (!w.length) continue;
     if (/^(cd|Set-Location|pushd)$/i.test(w[0]) && w[1]) { dir = resolve(dir, w[1]); continue; }
+    if (w[0] === 'git' && w[1] === '-C' && w[2]) gitDir = resolve(dir, w[2]); // git -C <repo> reset … : snapshot that repo
     const redirect = seg.match(/(?:^|[^0-9&>|])>\s*(?!\/dev\/null|&|\$null|nul\b)("[^"]+"|'[^']+'|[^\s;|&]+)/);
     if (redirect) out.add(resolve(dir, redirect[1].replace(/^["']|["']$/g, '')));
     const cmdWord = w[0] === 'sudo' ? w[1] : w[0];
@@ -121,7 +153,7 @@ function destructiveTargets(cwd, cmd) {
     for (const a of w.slice(w[0] === 'sudo' ? 2 : 1)) if (!a.startsWith('-') && !/^s[/|#]/.test(a) && !/[*?]/.test(a)) out.add(resolve(dir, a));
     if (w.some(a => /[*?]/.test(a))) out.add(dir); // globs: keep the folder they expand in
   }
-  return { dir, targets: [...out] };
+  return { dir: gitDir || dir, targets: [...out] };
 }
 
 // ---------- snapshots ----------
@@ -141,9 +173,9 @@ function snapshotGit(cwd, id, cmd) {
     return { kind: 'git', repo, ref: `refs/claude-checkpoints/${id}`, sha };
   } finally { fs.rmSync(idx, { force: true }); }
 }
-function snapshotCopy(cwd, id, cmd) {
-  // copy the existing files/folders that destructive parts of the command act on
-  const targets = destructiveTargets(cwd, cmd).targets.filter(p => { try { return fs.existsSync(p) && p !== path.parse(p).root && p !== os.homedir(); } catch { return false; } });
+function snapshotCopy(cwd, id, cmd, skipRepo) {
+  // copy the existing files/folders that destructive parts of the command act on (except those inside skipRepo)
+  const targets = destructiveTargets(cwd, cmd).targets.filter(p => { try { return fs.existsSync(p) && p !== path.parse(p).root && p !== os.homedir() && !(skipRepo && inside(p, skipRepo)); } catch { return false; } });
   if (!targets.length) return null;
   let size = 0; const sizeOf = p => { const st = fs.statSync(p); if (st.isFile()) return st.size; let s = 0; for (const e of fs.readdirSync(p)) { s += sizeOf(path.join(p, e)); if (s > MAX_COPY) break; } return s; };
   for (const t of targets) { size += sizeOf(t); if (size > MAX_COPY) return { kind: 'skipped', reason: `targets are over ${MAX_COPY / 1048576} MB` }; }
@@ -155,8 +187,9 @@ function snapshotCopy(cwd, id, cmd) {
 function hook() {
   let input = ''; try { input = fs.readFileSync(0, 'utf8'); } catch {}
   let ev; try { ev = JSON.parse(input); } catch { process.exit(0); }
-  const tool = ev.tool_name, cmd = ev.tool_input?.command;
-  if (!['Bash', 'PowerShell'].includes(tool) || typeof cmd !== 'string') process.exit(0);
+  const tool = ev.tool_name, raw = ev.tool_input?.command;
+  if (!['Bash', 'PowerShell'].includes(tool) || typeof raw !== 'string') process.exit(0);
+  const cmd = stripDataHeredocs(raw); // heredoc text fed to git/cat/tee is data, not commands to snapshot for
   const cwd = ev.cwd || process.cwd();
   const c = classify(cmd);
   if (c.action === 'block') {
@@ -168,11 +201,16 @@ function hook() {
     // fall through to also take a snapshot
   }
   if (c.action === 'snapshot' || c.action === 'ask') {
-    const id = newId();
-    let snap = null; try { const dir = destructiveTargets(cwd, cmd).dir; snap = snapshotGit(fs.existsSync(dir) ? dir : cwd, id, cmd) || snapshotCopy(cwd, id, cmd); } catch (e) { snap = { kind: 'error', reason: e.message }; }
-    if (snap) {
+    const id = newId(), id2 = newId();
+    let snap = null, extra = null;
+    try {
+      const dir = destructiveTargets(cwd, cmd).dir; snap = snapshotGit(fs.existsSync(dir) ? dir : cwd, id, cmd);
+      // paths outside that repo (rm ../other/x, rm /tmp/y) aren't in the git snapshot, so copy those too
+      if (snap) extra = snapshotCopy(cwd, id2, cmd, snap.repo); else snap = snapshotCopy(cwd, id, cmd);
+    } catch (e) { snap = snap || { kind: 'error', reason: e.message }; }
+    for (const [i, s] of [[id, snap], [id2, extra]]) if (s) {
       fs.mkdirSync(STORE, { recursive: true });
-      fs.appendFileSync(LOG, JSON.stringify({ id, time: new Date().toISOString(), cwd, tool, command: cmd.slice(0, 500), ...snap }) + '\n');
+      fs.appendFileSync(LOG, JSON.stringify({ id: i, time: new Date().toISOString(), cwd, tool, command: cmd.slice(0, 500), ...s }) + '\n');
     }
   }
   process.exit(0);

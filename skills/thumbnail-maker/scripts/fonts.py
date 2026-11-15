@@ -1,7 +1,7 @@
 """Cross-platform font lookup for thumbnail.py.
 
 Override any kind with an env var, e.g. FONT_TITLE=/path/to/Anton-Regular.ttf
-Kinds: title (tall condensed heavy), black (wide heavy), bold (subtitle), emoji (color emoji)
+Kinds: title (tall condensed heavy), black (wide heavy), bold (subtitle), emoji (color emoji), devanagari
 """
 import os
 from pathlib import Path
@@ -18,6 +18,11 @@ _CANDIDATES = {
              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"],
     "emoji": ["C:/Windows/Fonts/seguiemj.ttf", "/System/Library/Fonts/Apple Color Emoji.ttc",
               "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", "/usr/share/fonts/noto/NotoColorEmoji.ttf"],
+    # Hindi / Nepali / Marathi text: Impact and Segoe UI have no Devanagari and draw boxes
+    "devanagari": ["C:/Windows/Fonts/mangalb.ttf", "C:/Windows/Fonts/Nirmala.ttc", "/System/Library/Fonts/Kohinoor.ttc",
+                   "/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc",
+                   "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf", "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf",
+                   "/usr/share/fonts/noto/NotoSansDevanagari-Bold.ttf", "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf"],
 }
 
 

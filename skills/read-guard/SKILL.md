@@ -21,8 +21,8 @@ Merge into `~/.claude/settings.json` (or a project's `.claude/settings.json`), u
 |---|---|
 | `Read` of a text file > 800 lines or > 80 KB, without `limit` | **deny**. Claude is told the size and token cost and to Grep and then Read with `offset`/`limit` |
 | `Read` with `limit` ≤ 800, images, PDFs, notebooks, binaries | allow |
-| `cat` / `type` / `more` / `Get-Content` of a big file (follows `cd`) | **deny**, with suggestions to use `grep -n`, `head`, `tail` |
-| the same command piped into `head`, `tail`, `grep`, `wc`, `jq`…, or `Get-Content -Tail/-TotalCount` | allow |
+| `cat` / `type` / `more` / `Get-Content` of a big file (follows `cd`, Git Bash `/c/...` paths, `2>&1`) | **deny**, with suggestions to use `grep -n`, `head`, `tail` |
+| the same command piped into another program (`head`, `grep`, `jq`, `node script.js`…, but not `tee`/`cat`/`more`), redirected to a file, or `Get-Content -Tail/-TotalCount` | allow |
 | **the exact same call repeated within 10 minutes** | allow (escape hatch: a file that really must be read whole costs one extra turn, never a dead end) |
 | anything else, or any error in the hook | allow (fails open) |
 

@@ -19,7 +19,8 @@ node deploy.mjs --project my-site --dir dist --branch preview  # preview URL; pr
 ## Rules
 - Run `--dry-run` and read the file list before the first deploy of any folder. Everything uploaded is public.
 - Prefer `--include` for project folders that mix site and source files. A single-file site is `--include index.html`.
-- Excluded by default: `.git`, `node_modules`, `.env*`, keys/certs, `*.md`, `package*.json`, lockfiles, `wrangler.*`, OS junk, logs and databases.
+- Excluded by default: `.git`, `node_modules`, `.wrangler`, `.env*`, `.dev.vars`, keys/certs, `*.md`, `package*.json`, lockfiles, `wrangler.*`, OS junk, logs and databases. They stay out under `--include` too (`*.js` doesn't reach into `node_modules`) unless `--include` names the exact path, and `--exclude` still applies.
+- The secret scan reads every non-binary file that would go live, whatever its extension.
 - A secret found in a file that would go public stops the deploy. Never pass `--allow-secrets` unless the user confirms the value is meant to be public (e.g. a browser-restricted Maps key).
 - `--create` only when the user wants a NEW project. Look up existing names first with `npx wrangler pages project list`.
 - Production deploys replace the live site. Confirm with the user unless they asked for a deploy/redeploy.

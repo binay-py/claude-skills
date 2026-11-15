@@ -90,7 +90,7 @@ def main():
             y = y0 + li * int(size * 1.15)
             alpha = f"if(lt(t,{a:.3f}+0.15),(t-{a:.3f})/0.15,if(gt(t,{b:.3f}-0.12),({b:.3f}-t)/0.12,1))"
             ypos = f"{y}+18*max(0,1-(t-{a:.3f})/0.15)"
-            g += (f"{vprev}drawtext=fontfile='{FONT}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:"
+            g += (f"{vprev}drawtext=fontfile='{build.ff_font_for(txt, 'black')}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:"
                   f"borderw=7:bordercolor=black@0.85:x=(w-text_w)/2:y='{ypos}':alpha='{alpha}':"
                   f"enable='between(t,{a:.3f},{b:.3f})'[t{j}_{li}];")
             vprev = f"[t{j}_{li}]"

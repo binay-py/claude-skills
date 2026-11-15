@@ -11,7 +11,7 @@ description: Audit a Claude Code setup for the risks that cause leaked keys and 
 node audit.mjs                          # ~/.claude + every git repo under the current folder (depth 4)
 node audit.mjs --root ~/code --root ~/work
 node audit.mjs --fix                    # preview fixes
-node audit.mjs --fix --apply            # apply them (every touched file is backed up as *.bak-<timestamp>)
+node audit.mjs --fix --apply            # apply them (every touched file is backed up as *.bak-<timestamp>; files inside a git repo are backed up to ~/.claude/backups/ so the copy can't be committed)
 ```
 
 ## What it checks
@@ -19,7 +19,7 @@ node audit.mjs --fix --apply            # apply them (every touched file is back
 |---|---|
 | high | A token, key, password, JWT or credentialed URL inside a `permissions.allow` rule. "Yes, and don't ask again" saves the **exact command**, secrets included. |
 | high | `settings.local.json` / `.mcp.json` with a secret that git tracks. |
-| high | `Bash(*)`, `sudo`, `git push:*` (which includes `--force`), `curl … \| sh`, disk tools; `defaultMode: bypassPermissions`; home or root in `additionalDirectories`. |
+| high | `Bash(*)`, `sudo`, `git push:*` or `git:*` (which include `--force`), `curl … \| sh`, disk tools; `defaultMode: bypassPermissions`; home or root in `additionalDirectories`. |
 | medium | Secret files present in git **history**, not in `.gitignore`, `rm`/`Remove-Item` allowed, no deny rules. |
 | low/info | The bypass-mode warning hidden, no PreToolUse safety hook, keys in `~/.claude.json`. |
 

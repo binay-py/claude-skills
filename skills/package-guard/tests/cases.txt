@@ -55,3 +55,9 @@ pypi:httpie|uv tool install httpie
 pypi:cowsay|pipx run cowsay hi
 npm:zod|powershell -Command "npm i zod"
 npm:zod|cmd /c npm i zod
+npm:zod|bash -lc "npm i zod"
+pypi:requests|sudo -H pip install requests
+npm:zod|sudo -E npm i -g zod
+pypi:httpie|uvx --from httpie http
+pypi:httpie|uv tool run --from=httpie http
+npm:zod|echo 'a\' ; npm i zod

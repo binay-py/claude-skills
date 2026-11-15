@@ -38,20 +38,23 @@ function walk(root) {
 }
 
 // ---------- find the game root ----------
-let root = input;
+let root = input, single = null;
 if (fs.statSync(input).isFile()) {
   if (!/\.html?$/i.test(input)) { console.log('give a folder or a single .html file'); process.exit(1); }
   console.log('single HTML file: upload it as-is on itch (no zip needed) as long as it references no other files.');
-  root = path.dirname(input);
+  root = path.dirname(input); single = path.basename(input);
 }
-if (!fs.existsSync(path.join(root, 'index.html'))) {
-  const sub = fs.readdirSync(root, { withFileTypes: true }).filter(e => e.isDirectory() && fs.existsSync(path.join(root, e.name, 'index.html')));
+// exact-case lookup: fs.existsSync('index.html') is also true for "Index.html" on Windows/macOS
+const entry = d => { try { return fs.readdirSync(d).find(f => f.toLowerCase() === 'index.html'); } catch { return undefined; } };
+if (!single && entry(root) !== 'index.html') {
+  const sub = entry(root) ? [] : fs.readdirSync(root, { withFileTypes: true }).filter(e => e.isDirectory() && entry(path.join(root, e.name)));
   if (sub.length === 1) { warn(`index.html is inside "${sub[0].name}/", not at the top. Packaging that folder as the root (zipping the parent folder is the classic "index.html not found" mistake).`); root = path.join(root, sub[0].name); }
-  else if (fs.readdirSync(root).some(f => f.toLowerCase() === 'index.html')) err(`entry file must be named exactly "index.html" (found "${fs.readdirSync(root).find(f => f.toLowerCase() === 'index.html')}")`);
-  else err('no index.html found at the top of the folder');
+  const found = entry(root);
+  if (found && found !== 'index.html') err(`entry file must be named exactly "index.html" (found "${found}"): itch's servers are case-sensitive`);
+  else if (!found) err('no index.html found at the top of the folder');
 }
 
-const files = walk(root);
+const files = single ? [single] : walk(root);
 const lower = new Map(files.map(f => [f.toLowerCase(), f]));
 const fileSet = new Set(files);
 let total = 0;
@@ -81,7 +84,13 @@ for (const f of files.filter(f => /\.(html?|js|mjs|css|json)$/i.test(f))) {
     let ref = (m[1] || m[2] || m[3] || '').trim();
     if (!ref || ref.length > 300 || /^(data:|blob:|javascript:|mailto:|about:|#|\$\{)/i.test(ref) || /[{}<>()\s*,;]/.test(ref)) continue;
     const key = f + '|' + ref; if (checked.has(key)) continue; checked.add(key); refs++;
-    if (/^http:\/\//i.test(ref)) { err(`${f}: insecure http:// request (itch requires https): ${ref}`); continue; }
+    if (/^http:\/\//i.test(ref)) {
+      // an <a href> link is not a request the game makes: fine in a new tab, blocked inside itch's https iframe
+      const tag = isDoc && m[1] ? text.slice(text.lastIndexOf('<', m.index), text.indexOf('>', m.index) + 1) : '';
+      if (/^<a\s/i.test(tag)) { if (!/target\s*=\s*["']?_blank/i.test(tag)) warn(`${f}: link to an http:// page opens inside itch's https iframe and is blocked: ${ref} (use https or target="_blank")`); }
+      else err(`${f}: insecure http:// request (itch requires https): ${ref}`);
+      continue;
+    }
     if (/^(https:)?\/\//i.test(ref)) continue;
     if (ref.startsWith('/')) { err(`${f}: absolute path "${ref}" (itch serves your game from a subfolder; use "${ref.slice(1)}")`); continue; }
     if (ref.endsWith('/')) continue;
@@ -97,9 +106,10 @@ for (const f of files.filter(f => /\.(html?|js|mjs|css|json)$/i.test(f))) {
 }
 
 // ---------- index.html sanity ----------
-if (fs.existsSync(path.join(root, 'index.html'))) {
-  const idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  if (!/<meta[^>]+name=["']viewport/i.test(idx)) warn('index.html has no <meta name="viewport">: on phones the game renders zoomed out');
+const entryFile = single || entry(root);
+if (entryFile) {
+  const idx = fs.readFileSync(path.join(root, entryFile), 'utf8');
+  if (!/<meta[^>]+name=["']viewport/i.test(idx)) warn(`${entryFile} has no <meta name="viewport">: on phones the game renders zoomed out`);
   if (/youtube\.com\/game_api|ytgame/i.test(idx)) warn('YouTube Playables SDK found: inside itch\'s iframe it can think it is on YouTube and wait forever. Ship a build without it or add a timeout.');
 }
 
@@ -109,7 +119,7 @@ for (const e of errors) console.log('  ✘ ' + e);
 for (const w of warns) console.log('  ! ' + w);
 if (!errors.length && !warns.length) console.log('  ✓ ready for itch.io');
 if (errors.length) { console.log(`\n${errors.length} problem(s) would break the game on itch.io. Fix them, then run again.`); process.exit(1); }
-if (CHECK_ONLY) process.exit(0);
+if (CHECK_ONLY || single) process.exit(0); // a single .html file is uploaded as-is, not zipped
 
 // ---------- zip (STORE for already-compressed media, DEFLATE for the rest) ----------
 const out = path.resolve(outArg || input.replace(/[\\/]+$/, '') + '-itch.zip');
