@@ -1,0 +1,27 @@
+{
+  "description": "binay-skills guard hooks: bash-checkpoint, read-guard, package-guard and the session-handoff meter. Turn any of them off with the BINAY_SKILLS_HOOKS_OFF env var (comma-separated names, or \"all\").",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\" bash-checkpoint" },
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\" package-guard" }
+        ]
+      },
+      {
+        "matcher": "Read|Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\" read-guard" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs\" session-handoff" }
+        ]
+      }
+    ]
+  }
+}

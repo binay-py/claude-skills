@@ -8,6 +8,8 @@ description: Supply-chain check for packages Claude installs. A PreToolUse hook 
 `scripts/package-guard.mjs` is zero-dependency Node 22+. LLMs sometimes invent package names that sound right; attackers register those names. This hook checks the name against the registry before the install runs.
 
 ## Install (ask the user first, it changes their settings)
+If you installed the binay-skills plugin, this hook is already on (it ships in the plugin's `hooks/hooks.json`); turn it off with `"env": { "BINAY_SKILLS_HOOKS_OFF": "package-guard" }`. Otherwise, without the plugin:
+
 Add to `~/.claude/settings.json` (all projects) or `.claude/settings.json` (one project), with the absolute path to the script:
 ```json
 {

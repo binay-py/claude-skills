@@ -28,8 +28,8 @@ Common options: `--max-mb 5`, `--fps`, `--colors 256`, `--width`, `--loop 0` (fo
   @clear  @speed 30  @prompt ❯
   ```
   **Use real output.** Run the commands first and paste what they printed (trim paths, never include secrets).
-- **video**: ffmpeg trim (`--start`/`--dur`), `--crop W:H:X:Y`, `--speed`, `--text` caption (bold, outlined, bottom-centered, shrunk to fit the width; Devanagari works, but start a mixed caption with the Nepali word because ffmpeg shapes a line in its first letter's script; emoji are dropped because ffmpeg can't draw them), then the same palette pipeline.
-- **images**: each image is fitted onto a `--size` canvas (`--bg` color) with `--transition` (fade, slideleft, wipeleft, circleopen… any ffmpeg xfade).
+- **video**: ffmpeg trim (`--start`/`--dur`), `--crop W:H:X:Y`, `--speed`, `--text` caption (bold, outlined, bottom-centered, shrunk to fit the width), then the same palette pipeline. A caption with another script (Nepali, alone or mixed with English) or emoji is drawn by the headless browser and overlaid, so it shapes correctly; with no browser ffmpeg draws it and drops the emoji.
+- **images**: each image is fitted onto a `--size` canvas (`--bg` color) with `--transition` (fade, slideleft, wipeleft, circleopen… any ffmpeg xfade); `--text` adds the same caption as video mode.
 
 ## Making it look good (do this, not just "a GIF")
 1. **One idea, 3–8 seconds.** A GIF is a hook, not a tutorial. Show the before → after or the single magic moment, then hold the end state ~1.5 s so people can read it.

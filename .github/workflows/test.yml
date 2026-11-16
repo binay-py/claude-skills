@@ -66,6 +66,9 @@ jobs:
           git config --global user.name "ci"
           node skills/secret-commit-guard/tests/run.mjs
 
+      - name: Plugin hooks (hooks/hooks.json + dispatcher)
+        run: node hooks/test.mjs
+
       - name: cws-extension-check
         run: node skills/cws-extension-check/tests/run.mjs
 

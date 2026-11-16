@@ -8,6 +8,8 @@ description: Undo button for shell commands Claude runs. A PreToolUse hook that 
 `scripts/checkpoint.mjs` is zero-dependency Node 22+. Claude Code's own checkpoints cover file edits, **not shell commands**. This covers those.
 
 ## Install (ask the user first, it changes their settings)
+If you installed the binay-skills plugin, this hook is already on (it ships in the plugin's `hooks/hooks.json`); turn it off with `"env": { "BINAY_SKILLS_HOOKS_OFF": "bash-checkpoint" }`. Otherwise, without the plugin:
+
 Add to `~/.claude/settings.json` (all projects) or `.claude/settings.json` (one project), using the absolute path to the script:
 ```json
 {

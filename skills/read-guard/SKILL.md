@@ -8,6 +8,8 @@ description: Stop Claude Code from filling its context window with whole-file re
 `scripts/read-guard.mjs` is zero-dependency Node 22+. Every whole-file read of a 3,000-line file puts ~40k tokens into the context, and **every later turn re-reads them**. That's usually the single biggest avoidable cost (claude-token-audit shows it per tool).
 
 ## Install (ask the user first, it changes their settings)
+If you installed the binay-skills plugin, this hook is already on (it ships in the plugin's `hooks/hooks.json`); turn it off with `"env": { "BINAY_SKILLS_HOOKS_OFF": "read-guard" }`. Otherwise, without the plugin:
+
 Merge into `~/.claude/settings.json` (or a project's `.claude/settings.json`), using the absolute path:
 ```json
 { "hooks": { "PreToolUse": [

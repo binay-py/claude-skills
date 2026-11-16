@@ -12,8 +12,8 @@ Everything you'd want to tweak lives in edit.json:
 
 Each segment is rendered once to work/seg/ and cached by its settings, so re-renders after small edits are fast.
 """
-from fonts import font, ff_font
-import hashlib, json, re, subprocess, sys, textwrap
+from fonts import font, ff_font, harfbuzz, text_png
+import hashlib, itertools, json, re, subprocess, sys, textwrap
 from pathlib import Path
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 import pillow_heif
@@ -89,7 +89,26 @@ def ff_font_for(text, kind):
 
 
 def text_rev(*texts):  # extra cache-key part, so segments cached before Devanagari/emoji handling re-render
-    return ["t2"] if any(DEVA.search(str(t)) or EMOJI.search(str(t)) for t in texts) else []
+    return ["t3"] if any(DEVA.search(str(t)) or EMOJI.search(str(t)) for t in texts) else []
+
+
+_ov = itertools.count()
+
+
+def png_text(textfile):  # drawtext shapes a line in its first letter's script, so "Day 1 दिन" breaks: use text_overlay
+    return bool(DEVA.search(Path(textfile).read_text(encoding="utf-8"))) and harfbuzz()
+
+
+def text_overlay(textfile, size, x, y, fades, fill="white", border=0, line=None, shadow=None, enable=""):
+    """Filter-chain piece (like a drawtext) that overlays the line shaped word by word (fonts.text_png). x = the ink's
+    left edge or "center", y = its top (may use t), fades = ((start, length), (start, length)) of the alpha fades."""
+    n, png = next(_ov), Path(textfile).with_suffix(".png")
+    il, it, iw = text_png(Path(textfile).read_text(encoding="utf-8"), font("devanagari"), size, png, fill, border, line, shadow)
+    X = f"(W-{iw})/2-{il}" if x == "center" else f"{x}-{il}"
+    (a, d), (b, e) = fades
+    return (f"null[ov{n}];movie='{esc(png)}',loop=loop=-1:size=1,setpts=N/{FPS}/TB,format=rgba,"
+            f"fade=t=in:st={a:.3f}:d={d}:alpha=1,fade=t=out:st={b:.3f}:d={e}:alpha=1[op{n}];"
+            f"[ov{n}][op{n}]overlay=x='{X}':y='({y})-{it}'{enable}:eval=frame")
 
 
 def text_lines(name, text, width_chars):
@@ -139,11 +158,14 @@ def render_card(fmt, kind, dur):
     nf = int(dur * FPS)
     filters = [f"scale={W * 2}:{H * 2}",
                f"zoompan=z='1+0.04*on/{nf}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={nf}:s={W}x{H}:fps={FPS}"]
+    fades, shade = ((0.4, 0.8), (dur - 0.8, 0.8)), (2, 2, (0, 0, 0, 153))  # as the drawtext alpha and shadow
     for i, f in enumerate(tl):
-        filters.append(drawtext(f, ff_font_for(title, "serif_bold"), big, y0 + i * gap_t, fade))
+        filters.append(text_overlay(f, big, "center", y0 + i * gap_t, fades, shadow=shade) if png_text(f)
+                       else drawtext(f, ff_font_for(title, "serif_bold"), big, y0 + i * gap_t, fade))
     ys = y0 + len(tl) * gap_t + int(small * 0.8)
     for i, f in enumerate(sl):
-        filters.append(drawtext(f, ff_font_for(sub, "serif"), small, ys + i * gap_s, fade, color="0xF2D9A0"))
+        filters.append(text_overlay(f, small, "center", ys + i * gap_s, fades, fill="#F2D9A0", shadow=shade) if png_text(f)
+                       else drawtext(f, ff_font_for(sub, "serif"), small, ys + i * gap_s, fade, color="0xF2D9A0"))
     filters += ["setsar=1", "format=yuv420p"]
     run(["ffmpeg", "-y", "-v", "error", "-i", str(still), "-f", "lavfi", "-t", str(dur), "-i", "anullsrc=r=48000:cl=stereo",
          "-filter_complex", f"[0:v]{','.join(filters)}[v]", "-map", "[v]", "-map", "1:a", "-t", str(dur),
@@ -159,6 +181,8 @@ def label_filter(fmt, seg, dur):
     size = int(min(W, H) * 0.04)
     a = f"if(lt(t,0.5),0,if(lt(t,1.0),(t-0.5)/0.5,if(gt(t,{dur - 0.8}),max(0,({dur - 0.3}-t)/0.5),1)))"
     x, y = (int(W * 0.05), int(H * 0.85)) if W > H else ("(w-text_w)/2", int(H * 0.80))
+    if png_text(f):
+        return "," + text_overlay(f, size, x if W > H else "center", y, ((0.5, 0.5), (dur - 0.8, 0.5)), shadow=(2, 2, (0, 0, 0, 178)))
     return (f",drawtext=fontfile='{ff_font_for(seg['label'], 'serif_bold')}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:x={x}:y={y}:"
             f"shadowcolor=black@0.7:shadowx=2:shadowy=2:alpha='{a}'")
 

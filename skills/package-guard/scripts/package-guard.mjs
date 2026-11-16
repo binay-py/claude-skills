@@ -168,11 +168,23 @@ function fromTokens(t, ctx) {
   return out;
 }
 
+// Shell redirections are not arguments: `pip install x 2>&1`, `npm i y > log.txt`, `2>/dev/null`, `< in`.
+// Drop the operator and, when it stands alone, the file after it (otherwise "2" or "log.txt" look like packages).
+function stripRedirects(t) {
+  const out = [];
+  for (let i = 0; i < t.length; i++) {
+    const w = t[i];
+    if (/^\d*(>>?|<)$/.test(w) || /^&>>?$/.test(w)) { i++; continue; }     // "2>" "<" ">>" "&>" + their target word
+    if (/^\d*(>>?|<)&?\S*$/.test(w) || /^&>>?\S+$/.test(w)) continue;      // "2>&1" ">log.txt" "2>/dev/null" "&>out"
+    out.push(w);
+  }
+  return out;
+}
 export function parseCommand(cmd, cwd = process.cwd(), depth = 0) {
   let dir = cwd; const found = [];
   const hasLocalBin = name => { const bin = name.replace(/^@[^/]+\//, ''); for (let d = dir; ; d = path.dirname(d)) { if (fs.existsSync(path.join(d, 'node_modules', '.bin', bin)) || fs.existsSync(path.join(d, 'node_modules', name, 'package.json'))) return true; if (path.dirname(d) === d) return false; } };
   for (const seg of segments(cmd)) {
-    let t = tokens(seg);
+    let t = stripRedirects(tokens(seg));
     // skip sudo/env/VAR=x and their options (sudo -H pip …, sudo -u me npm …)
     for (let pre = false; t.length && (PREFIXES.test(t[0]) || /^\w+=/.test(t[0]) || (pre && t[0].startsWith('-'))); pre = true) t = t.slice(pre && /^-[ugn]$/.test(t[0]) ? 2 : 1);
     if (!t.length) continue;

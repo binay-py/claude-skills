@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-11-16
+
+### Changed
+- **The plugin ships its hooks.** Installing binay-skills now turns on bash-checkpoint, read-guard, package-guard and the session-handoff meter through `hooks/hooks.json`, with no settings to paste. Turn any of them off with `"env": { "BINAY_SKILLS_HOOKS_OFF": "read-guard,session-handoff" }` (or `"all"`). If you added these hooks to your settings by hand before, remove those entries, or each hook runs twice.
+
+### Fixed
+- **package-guard:** shell redirections were read as package names (`pip install x 2>&1` checked a package called "2", `> log.txt` one called "log.txt").
+- **gif-maker, event-recap-video:** lines that mix English and Nepali (or emoji) now render correctly, not just lines that start with the Nepali word.
+
 ## [1.2.0] - 2026-11-15
 
 Every skill was re-tested against real repos, logs, sites and media; each one had bugs, now fixed. Three new skills (26 in total).
@@ -56,5 +65,6 @@ First tagged release: 23 skills, tested on Windows, macOS and Linux in CI.
 ### Fixed
 - brave-cdp: Enter now submits forms, pages wait until they leave `about:blank`, and tabs a job opened are closed even when the job fails.
 
+[1.3.0]: https://github.com/binay-py/claude-skills/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/binay-py/claude-skills/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/binay-py/claude-skills/releases/tag/v1.1.0

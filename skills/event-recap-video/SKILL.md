@@ -14,7 +14,7 @@ Scripts live next to this file. Copy into the project:
 
 Project layout: `raw/` (untouched originals), `music/`, `work/` (cache), `output/`, `edit.json` (the whole edit).
 Fonts are found automatically on Windows/macOS/Linux; override with `FONT_SERIF`, `FONT_SERIF_BOLD`, `FONT_SANS_BOLD`, `FONT_BLACK`, `FONT_EMOJI`, `FONT_DEVANAGARI`.
-Nepali/Hindi titles, labels and reel text switch to a Devanagari font automatically and ffmpeg shapes them correctly, but it shapes a whole line in the script of its first letter: start a mixed line with the Nepali word ("दिन १ · Jun 12", not "Jun 12 · दिन १"). Emoji only work in motion.py stickers; build.py and reel.py drop them because ffmpeg draws them as boxes. motion.py stickers and the shortlist are drawn with Pillow; their Devanagari is shaped by ffmpeg word by word when Pillow has no raqm.
+Title, label and reel lines with Nepali/Hindi (alone or mixed with English) are shaped by ffmpeg one word at a time and overlaid as PNGs with the same fades and outline, because drawtext shapes a whole line in its first letter's script; motion.py stickers and the shortlist use the same helper. Emoji only work in motion.py stickers; build.py and reel.py drop them because ffmpeg draws them as boxes.
 
 ## 1. Get media
 - Put each export/zip in its own folder under `raw/`. Never modify originals.

@@ -50,7 +50,15 @@ Claude picks a skill from a normal request. For example, *"Is my Claude Code set
 
 ## Enabling the hooks
 
-Four skills include a hook. Hooks are **off until you add them** to `~/.claude/settings.json` (all projects) or `.claude/settings.json` (one project). Each skill's `SKILL.md` has the exact snippet. For example:
+Four skills include a hook. **Installing the plugin turns them on**: the plugin ships them in `hooks/hooks.json`, so there is nothing to paste. Run `/hooks` to see them.
+
+To turn some off and keep the skills, set `BINAY_SKILLS_HOOKS_OFF` in `~/.claude/settings.json` to a comma-separated list of hook names, or `all`:
+
+```json
+{ "env": { "BINAY_SKILLS_HOOKS_OFF": "read-guard,session-handoff" } }
+```
+
+If you copied a single skill folder instead of installing the plugin, add its hook to `~/.claude/settings.json` yourself. Each skill's `SKILL.md` has the snippet; replace `/path/to/skills` with where the folder lives:
 
 ```json
 {
@@ -62,6 +70,8 @@ Four skills include a hook. Hooks are **off until you add them** to `~/.claude/s
   }
 }
 ```
+
+Don't do both: with the plugin installed, a manual copy of the same hook runs twice.
 
 | Hook | Runs on | Does |
 |---|---|---|

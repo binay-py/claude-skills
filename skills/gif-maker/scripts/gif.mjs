@@ -6,7 +6,7 @@
 //   node gif.mjs html <file.html|url> --dur 4 [--size 800x450] [--fps 24] --out anim.gif
 //   node gif.mjs terminal <session.txt> [--size 900x520] [--theme dark|light] --out demo.gif
 //   node gif.mjs video <clip.mp4> [--start 3 --dur 5] [--width 720] [--crop W:H:X:Y] [--speed 1.5] [--text "Caption"] --out clip.gif
-//   node gif.mjs images <a.png> <b.png> ... [--hold 1.6] [--fade 0.4] [--size 1000x600] --out slides.gif
+//   node gif.mjs images <a.png> <b.png> ... [--hold 1.6] [--fade 0.4] [--size 1000x600] [--text "Caption"] --out slides.gif
 //   node gif.mjs optimize <in.gif|in.mp4> --max-mb 3 --out small.gif
 // Common: --max-mb N (default 5: shrinks fps → colors → width until it fits), --fps, --colors 256,
 //         --loop 0 (forever) | -1 (once), --mp4 / --webp (also write those), --keep (keep frames)
@@ -58,13 +58,13 @@ function encode({ inputArgs, chain = '', fps, width, colors = Number(opt('colors
 }
 
 // ---------- headless browser with a virtual clock ----------
-function findBrowser() {
+function findBrowser(soft) {
   if (process.env.BROWSER) return process.env.BROWSER;
   const P = process.env.PROGRAMFILES || 'C:/Program Files', P86 = process.env['PROGRAMFILES(X86)'] || 'C:/Program Files (x86)', L = process.env.LOCALAPPDATA || '';
   const c = process.platform === 'win32' ? [`${P}/Google/Chrome/Application/chrome.exe`, `${L}/Google/Chrome/Application/chrome.exe`, `${P86}/Microsoft/Edge/Application/msedge.exe`, `${P}/Microsoft/Edge/Application/msedge.exe`, `${P}/BraveSoftware/Brave-Browser/Application/brave.exe`]
     : process.platform === 'darwin' ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', '/Applications/Chromium.app/Contents/MacOS/Chromium']
     : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/microsoft-edge', '/snap/bin/chromium'];
-  return c.find(p => fs.existsSync(p)) || die('no Chromium-based browser found; set BROWSER=/path/to/chrome');
+  return c.find(p => fs.existsSync(p)) || (soft ? null : die('no Chromium-based browser found; set BROWSER=/path/to/chrome'));
 }
 // Replaces the page's clock: requestAnimationFrame, performance.now, Date.now, setTimeout/setInterval and all
 // CSS/Web Animations advance only when we say so, so every frame is exact and the GIF loops cleanly.
@@ -206,6 +206,64 @@ async function recordPage(url, { width, height, fps, dur, scale = 1 }) {
 const parseSize = (s, d) => { const m = String(s || d).match(/^(\d+)x(\d+)$/); return m ? [Number(m[1]), Number(m[2])] : die('bad --size, use WIDTHxHEIGHT'); };
 const framesInput = fps => ['-framerate', String(fps), '-i', path.join(work, 'f%05d.png')];
 
+// ---------- captions (video / images --text) ----------
+// drawtext shapes a whole line in the script of its first letter ("Day 1 दिन" breaks) and has no font fallback (emoji
+// draw as boxes), so a caption with another script or emoji is drawn by the headless browser and overlaid as a PNG.
+const BROWSER_TEXT = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]|\p{Emoji_Presentation}|\uFE0F/u;
+async function captionPng(text, maxW, size, file) {
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = esc(text).replace(/(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*)/gu, '<span class="e">$1</span>');
+  const page = path.join(work, 'caption.html');
+  fs.writeFileSync(page, `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}
+#c{position:absolute;left:0;top:0;white-space:nowrap;line-height:1.3;color:#fff;font-weight:900;paint-order:stroke fill;
+font-family:"Segoe UI","Arial Black",Arial,"Nirmala UI",Mangal,"Noto Sans Devanagari","DejaVu Sans",sans-serif}
+.e{-webkit-text-stroke:0}</style><div id="c">${html}</div>`);
+  const br = await startBrowser('gif-maker-browser-', ['--force-color-profile=srgb', '--font-render-hinting=none']);
+  let ws = null, send = null;
+  try {
+    ws = new WebSocket(br.wsUrl); await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+    let id = 0; const pending = new Map();
+    ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); } };
+    send = (method, params = {}, sessionId) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params, sessionId })); return new Promise((res, rej) => pending.set(i, { res, rej })); };
+    const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+    const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
+    const s = (m, p) => send(m, p, sessionId);
+    await s('Page.enable');
+    await s('Emulation.setDeviceMetricsOverride', { width: maxW + 200, height: size * 3, deviceScaleFactor: 1, mobile: false });
+    await s('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
+    await s('Page.navigate', { url: 'file:///' + page.split(path.sep).join('/') });
+    const ev = async e => (await s('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true })).result.value;
+    for (let i = 0; i < 100; i++) { await sleep(100); try { if (await ev(`document.readyState === 'complete' && !!document.getElementById('c')`)) break; } catch {} }
+    await ev(`document.fonts.ready.then(() => 1)`);
+    // the drawtext look: heavy white text, outline ~size/8 in 85 % black, shrunk until it fits the width
+    const r = await ev(`(() => { const c = document.getElementById('c'); let s = ${size}, b;
+      const set = () => { b = Math.max(2, Math.round(s / 8)); c.style.fontSize = s + 'px'; c.style.webkitTextStroke = 2 * b + 'px rgba(0,0,0,.85)'; c.style.padding = b + 2 + 'px'; };
+      set(); for (let i = 0; i < 6 && c.getBoundingClientRect().width > ${maxW}; i++) { s = Math.floor(s * ${maxW} / c.getBoundingClientRect().width); set(); }
+      const r = c.getBoundingClientRect(); return { w: Math.ceil(r.width), h: Math.ceil(r.height), pad: b + 2 }; })()`);
+    const { data } = await s('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: r.w, height: r.h, scale: 1 }, captureBeyondViewport: true });
+    fs.writeFileSync(file, Buffer.from(data, 'base64'));
+    return r;
+  } finally { send ? await br.close(send, ws) : br.stop(); }
+}
+// The caption as a filter-chain piece for a cw x ch frame: the browser's PNG overlaid, or drawtext.
+async function captionFilter(text, cw, ch) {
+  const e = p => p.replace(/\\/g, '/').replace(/:/g, '\\:');
+  if (BROWSER_TEXT.test(text) && findBrowser(true)) {
+    const png = path.join(work, 'caption.png'), { pad } = await captionPng(text, Math.round(cw * 0.92), Math.round(ch / 11), png);
+    return `null[cap0];movie='${e(png)}'[cap1];[cap0][cap1]overlay=x=(W-w)/2:y=H-h-H/14+${pad}`;
+  }
+  if (BROWSER_TEXT.test(text)) console.log('  note: no browser found, so ffmpeg draws the caption (mixed scripts may shape wrongly)');
+  // drawtext has no font fallback: emoji always draw as boxes, and Devanagari needs a font that has it
+  const noEmoji = text.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
+  if (noEmoji !== text.trim()) { console.log('  note: emoji removed from --text (ffmpeg draws them as boxes; use html mode for emoji)'); text = noEmoji; }
+  const deva = /[\u0900-\u097F]/.test(text) ? ['C:/Windows/Fonts/mangalb.ttf', 'C:/Windows/Fonts/Nirmala.ttc', '/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc', '/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf', '/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf', '/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf'] : [];
+  const font = [...deva, 'C:/Windows/Fonts/seguibl.ttf', 'C:/Windows/Fonts/arialbd.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'].find(f => fs.existsSync(f));
+  const tf = path.join(work, 'caption.txt'); fs.writeFileSync(tf, text);
+  // h/11, but long captions shrink to fit the width (they ran off both edges of portrait clips)
+  const fsz = Math.round(Math.min(ch / 11, 1.4 * cw / Math.max(1, [...text].length)));
+  return `drawtext=${font ? `fontfile='${e(font)}':` : ''}textfile='${e(tf)}':fontcolor=white:fontsize=${fsz}:borderw=${Math.max(2, Math.round(fsz / 8))}:bordercolor=black@0.85:x=(w-text_w)/2:y=h-text_h-h/14`;
+}
+
 // ---------- terminal session → HTML ----------
 // Format: "$ cmd" typed; other lines printed; "@pause 800"; "@clear"; "@title text"; "@speed 35" (ms/char);
 // "@prompt ❯"; colors auto (✓/✔ green, ✘/✗/error red, !/warn yellow, #/dim comment grey) or [green]..[/].
@@ -287,21 +345,11 @@ const main = async () => {
     if (opt('crop')) parts.push(`crop=${opt('crop')}`);
     if (speed !== 1) parts.push(`setpts=PTS/${speed}`);
     if (opt('text')) {
-      // drawtext has no font fallback: emoji always draw as boxes, and Devanagari needs a font that has it
-      let text = opt('text');
-      const noEmoji = text.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
-      if (noEmoji !== text.trim()) { console.log('  note: emoji removed from --text (ffmpeg draws them as boxes; use html mode for emoji)'); text = noEmoji; }
-      const deva = /[\u0900-\u097F]/.test(text) ? ['C:/Windows/Fonts/mangalb.ttf', 'C:/Windows/Fonts/Nirmala.ttc', '/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc', '/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf', '/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf', '/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf'] : [];
-      const font = [...deva, 'C:/Windows/Fonts/seguibl.ttf', 'C:/Windows/Fonts/arialbd.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'].find(f => fs.existsSync(f));
-      const tf = path.join(work, 'caption.txt'); fs.writeFileSync(tf, text);
-      const e = p => p.replace(/\\/g, '/').replace(/:/g, '\\:');
       // size from the frame drawtext sees: displayed (rotation-aware) size, or the crop
       const st = probe(src)?.streams?.[0] || {}, turned = Math.abs(Number(st.side_data_list?.[0]?.rotation) || 0) % 180 === 90;
       const vw = Number(turned ? st.height : st.width) || 1280, vh = Number(turned ? st.width : st.height) || 720;
       const c = opt('crop') ? opt('crop').split(':') : [], cw = Number(c[0]) || vw, ch = Number(c[1]) || vh;
-      // h/11, but long captions shrink to fit the width (they ran off both edges of portrait clips)
-      const fsz = Math.round(Math.min(ch / 11, 1.4 * cw / Math.max(1, [...text].length)));
-      parts.push(`drawtext=${font ? `fontfile='${e(font)}':` : ''}textfile='${e(tf)}':fontcolor=white:fontsize=${fsz}:borderw=${Math.max(2, Math.round(fsz / 8))}:bordercolor=black@0.85:x=(w-text_w)/2:y=h-text_h-h/14`);
+      parts.push(await captionFilter(opt('text'), cw, ch));
     }
     return encode({ inputArgs, chain: parts.join(','), fps, width });
   }
@@ -316,7 +364,7 @@ const main = async () => {
     for (let i = 1; i < imgs.length; i++) { chain += `;[${last}][v${i}]xfade=transition=${opt('transition', 'fade')}:duration=${fade}:offset=${(hold * i).toFixed(3)}[x${i}]`; last = `x${i}`; }
     const mid = path.join(work, 'slides.mp4');
     ff([...inputs, '-filter_complex', chain, '-map', `[${last}]`, '-c:v', 'libx264', '-crf', '12', '-pix_fmt', 'yuv420p', mid], 'slides');
-    return encode({ inputArgs: ['-i', mid], fps, width: Number(opt('width', W)) });
+    return encode({ inputArgs: ['-i', mid], chain: opt('text') ? await captionFilter(opt('text'), W, H) : '', fps, width: Number(opt('width', W)) });
   }
   if (mode === 'optimize') {
     const src = positional[0] && fs.existsSync(positional[0]) ? path.resolve(positional[0]) : die('give a .gif or video');

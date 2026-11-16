@@ -43,21 +43,26 @@ def ff_font(kind: str) -> str:
 
 
 
-# ---------------------------------------------------------------- Devanagari shaping for text drawn with Pillow
-# Pillow without raqm can't shape Devanagari (conjuncts, the short-i matra before its consonant); ffmpeg's drawtext
-# (HarfBuzz) can, so Pillow-drawn text (motion.py stickers, shortlist labels) is rendered by ffmpeg as masks.
+# ---------------------------------------------------------------- Devanagari shaping
+# Pillow without raqm can't shape Devanagari (conjuncts, the short-i matra before its consonant), and ffmpeg's
+# drawtext shapes a whole line in the script of its first letter ("Day 1 दिन" breaks). So such text is shaped by
+# drawtext one word at a time and composed in Pillow: motion.py stickers and shortlist labels, and (as PNGs that
+# ffmpeg overlays) build.py cards and labels and reel.py text.
 DEVA = re.compile("[\u0900-\u097F]")
+
+
+@functools.lru_cache(None)
+def harfbuzz():
+    try:
+        return "libharfbuzz" in subprocess.run(["ffmpeg", "-hide_banner", "-buildconf"], capture_output=True, text=True).stdout
+    except OSError:
+        return False
 
 
 @functools.lru_cache(None)
 def _ffmpeg_shapes():
     from PIL import features
-    if features.check("raqm"):
-        return False
-    try:
-        return "libharfbuzz" in subprocess.run(["ffmpeg", "-hide_banner", "-buildconf"], capture_output=True, text=True).stdout
-    except OSError:
-        return False
+    return not features.check("raqm") and harfbuzz()
 
 
 def needs_shaping(text):
@@ -119,3 +124,20 @@ def paste_shaped(im, x, y, sh, fill, line=None):
             im.alpha_composite(layer)
         else:
             im.paste(Image.new(im.mode, im.size, c[:3]), (0, 0), a)
+
+
+def text_png(text, path, size, out, fill="white", border=0, line=None, shadow=None):
+    """One line shaped word by word, saved as an RGBA PNG for ffmpeg's overlay (outline: border px in `line` color,
+    shadow: (dx, dy, color)). Returns the ink's left and top edge inside the PNG and the ink width."""
+    from PIL import Image
+    sh = shaped(text, path, size, border)
+    dx, dy, sc = shadow or (0, 0, None)
+    m = border + 2
+    im = Image.new("RGBA", (sh[0].width + dx + 2 * m, sh[0].height + dy + 2 * m), (0, 0, 0, 0))
+    x, y = m - sh[2], m - sh[3]  # pen origin: the ink's left edge, on the baseline
+    if sc:
+        paste_shaped(im, x + dx, y + dy, sh, sc, sc if border else None)
+    paste_shaped(im, x, y, sh, fill, line)
+    im.save(out)
+    b = sh[0].getbbox()
+    return m + b[0], m + b[1], sh[4]

@@ -90,9 +90,13 @@ def main():
             y = y0 + li * int(size * 1.15)
             alpha = f"if(lt(t,{a:.3f}+0.15),(t-{a:.3f})/0.15,if(gt(t,{b:.3f}-0.12),({b:.3f}-t)/0.12,1))"
             ypos = f"{y}+18*max(0,1-(t-{a:.3f})/0.15)"
-            g += (f"{vprev}drawtext=fontfile='{build.ff_font_for(txt, 'black')}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:"
-                  f"borderw=7:bordercolor=black@0.85:x=(w-text_w)/2:y='{ypos}':alpha='{alpha}':"
-                  f"enable='between(t,{a:.3f},{b:.3f})'[t{j}_{li}];")
+            if build.png_text(f):  # Devanagari: shaped word by word and overlaid (same outline, fades and slide)
+                g += vprev + build.text_overlay(f, size, "center", ypos, ((a, 0.15), (b - 0.12, 0.12)), border=7, line=(0, 0, 0, 217),
+                                                enable=f":enable='between(t,{a:.3f},{b:.3f})'") + f"[t{j}_{li}];"
+            else:
+                g += (f"{vprev}drawtext=fontfile='{build.ff_font_for(txt, 'black')}':textfile='{esc(f)}':fontsize={size}:fontcolor=white:"
+                      f"borderw=7:bordercolor=black@0.85:x=(w-text_w)/2:y='{ypos}':alpha='{alpha}':"
+                      f"enable='between(t,{a:.3f},{b:.3f})'[t{j}_{li}];")
             vprev = f"[t{j}_{li}]"
 
     base, duck = float(R.get("music_volume", 0.9)), float(R.get("duck_volume", 0.35))

@@ -61,3 +61,9 @@ npm:zod|sudo -E npm i -g zod
 pypi:httpie|uvx --from httpie http
 pypi:httpie|uv tool run --from=httpie http
 npm:zod|echo 'a\' ; npm i zod
+pypi:edge-tts|.venv/Scripts/python -m pip install -q edge-tts 2>&1 | tail -2
+npm:lodash|npm i lodash 2>/dev/null
+pypi:requests|pip install requests > log.txt
+pypi:flask|pip install flask >> install.log 2>&1
+npm:zod|npm install zod &> out.txt
+npm:chalk|npm i chalk 2> err.txt

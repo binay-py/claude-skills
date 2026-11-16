@@ -31,7 +31,8 @@ const SETUP = {
     put(d, 'node_modules/unused/index.js', 'module.exports = 1;\n'); put(d, '.env', 'DEBUG=1\n'); put(d, 'key.pem', '-----BEGIN ' + 'PRIVATE KEY-----\nMIIfake\n-----END ' + 'PRIVATE KEY-----\n');
     put(d, 'background.js.map', '{}'); put(d, '.DS_Store', 'x'); put(d, 'Thumbs.db', 'x'); put(d, '_metadata/computed_hashes.json', '{}');
   },
-  'dist-layout': d => { icon()(d); icon('dist/icon128.png')(d); const t = new Date(Date.now() - 3600e3); fs.utimesSync(path.join(d, 'dist/background.js'), t, t); },
+  // dist/ built an hour before the source last changed (relative to the source's own mtime: cpSync keeps timestamps on Windows)
+  'dist-layout': d => { icon()(d); icon('dist/icon128.png')(d); const t = new Date(fs.statSync(path.join(d, 'background.js')).mtimeMs - 3600e3); fs.utimesSync(path.join(d, 'dist/background.js'), t, t); },
   'plasmo-layout': d => { icon('build/chrome-mv3-dev/icon128.png')(d); icon('build/chrome-mv3-prod/icon128.png')(d); },
 };
 fs.cpSync(here('./fixtures'), tmp, { recursive: true });

@@ -16,7 +16,8 @@ Every message in a session re-sends the whole context. At 300k+ tokens even "tha
 
 Secrets in commands and prompts (API keys, tokens, `PASSWORD=…`, credentialed URLs) are replaced with `[redacted]` in the facts section. Still read it before sharing.
 
-## Context meter (optional hook, ask before installing)
+## Context meter (Stop hook)
+If you installed the binay-skills plugin, the meter is already on (it ships in the plugin's `hooks/hooks.json`); turn it off with `"env": { "BINAY_SKILLS_HOOKS_OFF": "session-handoff" }`. Without the plugin, ask the user before adding it:
 ```json
 { "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "node \"/ABSOLUTE/PATH/session-handoff/scripts/handoff.mjs\" meter" } ] } ] } }
 ```
