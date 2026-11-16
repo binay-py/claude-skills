@@ -6,7 +6,7 @@ body:
     id: skill
     attributes:
       label: Skill
-      options: [bash-checkpoint, brave-cdp, cf-pages-deploy, claude-md-doctor, claude-safety-audit, claude-sandbox, claude-token-audit, env-doctor, event-recap-video, freelance-proposal, gif-maker, itch-html5-package, link-preview-check, mcp-audit, package-guard, read-guard, readme-upgrade, release-notes, secret-commit-guard, session-handoff, site-qa, thumbnail-maker, visual-diff]
+      options: [bash-checkpoint, brave-cdp, cf-pages-deploy, claude-md-doctor, claude-safety-audit, claude-sandbox, claude-token-audit, env-doctor, event-recap-video, freelance-proposal, gif-maker, itch-html5-package, lean, link-preview-check, mcp-audit, package-guard, read-guard, readme-upgrade, release-notes, secret-commit-guard, session-handoff, site-qa, thumbnail-maker, visual-diff]
     validations:
       required: true
   - type: dropdown

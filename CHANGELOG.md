@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **lean:** a token-lean mode. Invoking it makes Claude read only what it needs, cap command output, skip narration and keep answers short. `scripts/lean_check.py` reports the fixed overhead loaded every session (default model, 1M context, CLAUDE.md, MEMORY.md, MCP servers, skill descriptions, prompt hooks, auto-compact) with a fix for each.
+
 ## [1.3.0] - 2026-11-16
 
 ### Changed

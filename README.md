@@ -1,6 +1,6 @@
 # claude-skills
 
-A collection of 26 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, PWAs, Chrome extensions, repos, games and media.
+A collection of 27 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, PWAs, Chrome extensions, repos, games and media.
 
 [![tests](https://github.com/binay-py/claude-skills/actions/workflows/test.yml/badge.svg)](https://github.com/binay-py/claude-skills/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -105,6 +105,7 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 | [read-guard](skills/read-guard) | Hook | Points Claude to Grep and partial reads instead of loading very large files whole. |
 | [session-handoff](skills/session-handoff) | CLI, Hook | Writes a HANDOFF.md so a long session can continue in a fresh, cheaper one. |
 | [mcp-audit](skills/mcp-audit) | CLI | Lists MCP servers across scopes and plugins with real usage, duplicates, failures and token cost. |
+| [lean](skills/lean) | Mode, CLI | Token-lean working rules for the session (targeted reads, capped output, short answers) plus a check of what loads into every session. |
 | [claude-md-doctor](skills/claude-md-doctor) | CLI | Checks CLAUDE.md, rules, imports and memory files for size limits, broken imports and stale references. |
 
 ### Websites
