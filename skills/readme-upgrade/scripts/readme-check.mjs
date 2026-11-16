@@ -80,7 +80,7 @@ function anchorsOfFile(f) {
 // ---------- title + description ----------
 const isBadgeLine = l => /^\s*(\[?!\[[^\]]*\]\([^)]*\)\]?(\([^)]*\))?\s*)+$/.test(l) || /^\s*(<a [^>]*>\s*)?<img [^>]*>(\s*<\/a>)?\s*$/i.test(l);
 const firstH = headings[0];
-const contentStart = lines.findIndex(l => l.trim() && !/^\s*<!--.*--!?>\s*$/.test(l) && !isBadgeLine(l) && !/^\s*<\/?(p|div|picture|source|br)\b[^>]*>\s*$/i.test(l));
+const contentStart = lines.findIndex(l => l.trim() && !/^\s*<!--[\s\S]*?--!?>\s*$/.test(l) && !isBadgeLine(l) && !/^\s*<\/?(p|div|picture|source|br)\b[^>]*>\s*$/i.test(l));
 // an HTML <h1> near the top (common in designed READMEs: <h1 align="center"><img alt="…"></h1>) counts as the title
 const htmlH1 = lines.slice(0, 15).some(l => /<h1\b/i.test(l));
 if (!htmlH1 && (!firstH || firstH.level !== 1 || firstH.line > Math.max(contentStart + 3, 12))) add('medium', firstH ? `the first heading (line ${firstH.line}) is not a level-1 title near the top: start with "# Project name"` : 'no title: start the README with "# Project name"');
