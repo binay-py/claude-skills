@@ -1,0 +1,15 @@
+{
+  "title": "Himal Studio",
+  "hook": "Your shop online this week",
+  "tagline": "Fast websites for Nepal",
+  "platform": "reels",
+  "brand": { "bg": ["#0b2e28"], "accent": "#f4a62a", "logo": "site/logo.svg" },
+  "outro": { "cta": "Start your site today", "url": "himal.example", "seconds": 2.5 },
+  "scenes": [
+    { "url": "http://127.0.0.1:8765/", "seconds": 2.5 },
+    { "caption": "Real projects, live in days", "actions": [{ "scroll": "#work", "ms": 1200 }, { "click": "#reveal", "ms": 1400 }] },
+    { "caption": "See every detail", "actions": [{ "zoom": "#more", "scale": 1.6, "ms": 2200 }] },
+    { "caption": "नमस्ते from Kathmandu", "formats": ["16x9"], "actions": [{ "hover": "text=Pricing", "ms": 1200 }, { "wait": 600 }] },
+    { "caption": "Tell us your business", "actions": [{ "type": "#biz", "text": "Thamel Café", "ms": 2400 }] }
+  ]
+}

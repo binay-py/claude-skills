@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Himal Studio | Websites for Nepal</title>
+<meta name="description" content="Fast websites for shops, clinics and cafés in Nepal. Built in days, easy to update.">
+<meta name="theme-color" content="#0e7c66">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root { --ink: #10202a; --brand: #0e7c66; --sun: #f4a62a; --paper: #f6f7f5; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font: 18px/1.6 system-ui, "Segoe UI", "Nirmala UI", sans-serif; color: var(--ink); background: var(--paper); }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 14px 6vw; background: rgba(246,247,245,.95); border-bottom: 1px solid #dde3e0; }
+  header b { font-size: 20px; } nav a { margin-left: 22px; color: inherit; text-decoration: none; }
+  section { padding: 90px 6vw; min-height: 70vh; }
+  .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: center; min-height: 80vh; }
+  h1 { font-size: clamp(40px, 6vw, 72px); line-height: 1.05; margin: 0 0 18px; letter-spacing: -.02em; }
+  h2 { font-size: clamp(30px, 4vw, 48px); margin: 0 0 18px; }
+  .btn { display: inline-block; padding: 14px 26px; border-radius: 999px; background: var(--brand); color: #fff; border: 0; font: 600 17px system-ui, sans-serif; cursor: pointer; text-decoration: none; }
+  .btn:hover { background: #0a5f4e; }
+  .badge { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--sun); color: #3b2500; font-weight: 700; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .card { background: #fff; border-radius: 16px; padding: 26px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  .dark { background: var(--ink); color: #fff; }
+  #more { display: none; margin-top: 24px; padding: 22px; border-radius: 14px; background: #fff3dc; color: #3b2500; }
+  #more.open { display: block; animation: rise .5s ease-out; }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  input { font: inherit; padding: 12px 16px; border-radius: 10px; border: 1px solid #b9c4bf; width: min(420px, 100%); }
+  img { max-width: 100%; display: block; border-radius: 18px; }
+  #cookie-banner { position: fixed; left: 0; right: 0; bottom: 0; padding: 18px; background: #222; color: #fff; text-align: center; z-index: 9; }
+  footer { padding: 40px 6vw; background: #0b161d; color: #9fb3ad; }
+  @media (max-width: 700px) { .hero, .cards { grid-template-columns: 1fr; } nav { display: none; } section { padding: 60px 22px; } }
+</style>
+</head>
+<body>
+<header><b>Himal Studio</b><nav><a href="#work">Work</a><a href="#price">Pricing</a><a href="#contact">Contact</a></nav></header>
+<section class="hero">
+  <div>
+    <span class="badge">New · 2026</span>
+    <h1>नमस्ते Nepal 🙏 websites that bring customers</h1>
+    <p>Fast sites for shops, clinics and cafés. Built in days, easy to update.</p>
+    <a class="btn" href="#contact">Start a project</a>
+  </div>
+  <img src="hero.svg" alt="A website on a laptop" width="560" height="400">
+</section>
+<section id="work">
+  <h2>Our work</h2>
+  <div class="cards">
+    <div class="card"><h3>Thamel Café</h3><p>Menu, map and WhatsApp orders.</p></div>
+    <div class="card"><h3>Patan Dental</h3><p>Online booking in Nepali and English.</p></div>
+    <div class="card"><h3>Pokhara Treks</h3><p>Trip pages that rank on Google.</p></div>
+  </div>
+  <button class="btn" id="reveal" style="margin-top:28px" onclick="document.getElementById('more').classList.add('open'); this.textContent = 'Showing more'">Show more</button>
+  <div id="more"><b>12 more projects</b> in Kathmandu, Lalitpur and Bhaktapur — each one live in under a week.</div>
+</section>
+<section id="price" class="dark">
+  <h2>Simple pricing</h2>
+  <p>One price, no surprises: design, hosting setup and a year of small edits.</p>
+  <img src="photo.svg" alt="Pricing chart" loading="lazy" width="640" height="300">
+</section>
+<section id="contact">
+  <h2>Get in touch</h2>
+  <p>Tell us about your business.</p>
+  <label for="biz">Business name</label><br>
+  <input id="biz" placeholder="e.g. Thamel Café">
+</section>
+<footer>© Himal Studio · Kathmandu</footer>
+<div id="cookie-banner">We use cookies. <button>Accept</button></div>
+</body>
+</html>

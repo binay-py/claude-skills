@@ -81,6 +81,12 @@ jobs:
       - name: pwa-check (fixtures, headless Chrome)
         run: node skills/pwa-check/tests/run.mjs
 
+      - name: promo-video (fixture site, headless Chrome + ffmpeg, Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          node skills/promo-video/tests/run.mjs
+
       - name: README links and anchors
         run: node skills/readme-upgrade/scripts/readme-check.mjs . --offline
 

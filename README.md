@@ -1,6 +1,6 @@
 # claude-skills
 
-A collection of 27 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, PWAs, Chrome extensions, repos, games and media.
+A collection of 28 skills for [Claude Code](https://claude.com/claude-code). Some are guardrails that stop risky commands, hallucinated packages and leaked keys. Some cut token usage. The rest are tools for shipping websites, PWAs, Chrome extensions, repos, games and media.
 
 [![tests](https://github.com/binay-py/claude-skills/actions/workflows/test.yml/badge.svg)](https://github.com/binay-py/claude-skills/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -53,8 +53,9 @@ To remove everything: `/plugin uninstall binay-skills@binay-skills`.
 | Needed for | Requirement |
 |---|---|
 | All skills | Node.js 22 or newer. No npm packages are installed. |
-| site-qa, visual-diff, pwa-check, gif-maker | Chrome, Edge, Brave or Chromium (run headless with a temporary profile) |
-| gif-maker, event-recap-video | ffmpeg |
+| site-qa, visual-diff, pwa-check, gif-maker, promo-video | Chrome, Edge, Brave or Chromium (run headless with a temporary profile) |
+| gif-maker, event-recap-video, promo-video | ffmpeg |
+| promo-video voiceover (optional) | Python 3 with `edge-tts` |
 | thumbnail-maker, event-recap-video | Python 3 with Pillow |
 | lean (`lean_check.py`) | Python 3 |
 | claude-sandbox | Docker |
@@ -146,6 +147,7 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 |---|---|---|
 | [gif-maker](skills/gif-maker) | CLI | GIFs from HTML animations, terminal sessions, video clips or images, sized to a file-size budget. |
 | [thumbnail-maker](skills/thumbnail-maker) | CLI | YouTube and social thumbnails: a large title over a real screenshot (circled and annotated) or a cut-out photo, with readability checks. |
+| [promo-video](skills/promo-video) | CLI | Promo videos of your own site: the real page recorded smoothly in a phone (9:16) and a browser window (16:9) with a hook, captions, music or voiceover, checked against a short-form video playbook. |
 | [event-recap-video](skills/event-recap-video) | CLI, Guide | Turns event photos and videos into a recap video, a vertical version and a beat-synced reel. |
 
 ### Freelance and browser
@@ -183,7 +185,7 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 - **Secrets stay hidden.** Tools that look for keys never print more than the first few characters.
 - **Hooks never trap you.** They fail open, and read-guard always allows a repeated request.
 - **Nothing phones home.** No telemetry. The few skills that use the network only contact the service they're about (npm/PyPI, Cloudflare, the URL you gave). The full list is in [SECURITY.md](SECURITY.md#what-the-skills-send-over-the-network).
-- **Tested on real projects.** Each skill was run against real repositories and sites before release. Seven skills and the plugin hooks have test suites (`node skills/<name>/tests/run.mjs`), and CI runs them on Windows, macOS and Linux on every push.
+- **Tested on real projects.** Each skill was run against real repositories and sites before release. Eight skills and the plugin hooks have test suites (`node skills/<name>/tests/run.mjs`), and CI runs them on Windows, macOS and Linux on every push.
 
 ## Security
 

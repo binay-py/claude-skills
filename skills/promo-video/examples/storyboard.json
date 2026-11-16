@@ -1,0 +1,33 @@
+{
+  "_about": "promo-video storyboard. Keys starting with _ are ignored. Check it with: node promo.mjs plan storyboard.json",
+  "title": "Binay Websites",
+  "hook": "Your business, online in days",
+  "tagline": "Websites for local businesses in Nepal",
+  "platform": "reels",
+  "brand": {
+    "bg": ["#121a2b", "#1d2d4e"],
+    "accent": "#f2a71b",
+    "logo": "https://binaywebsites.pages.dev/apple-touch-icon.png",
+    "font": "Bricolage Grotesque"
+  },
+  "_music": "Optional: a royalty-free track, path relative to this file. Looped or trimmed, faded and ducked under the voice.",
+  "music": "music/sunny-vibes.mp3",
+  "voice": { "name": "en-US-AndrewMultilingualNeural", "rate": "+0%" },
+  "outro": { "cta": "Get your website this week", "url": "binaywebsites.pages.dev", "seconds": 3, "voiceover": "Link in bio." },
+  "formats": ["9x16", "16x9"],
+  "hide": ["#chat-widget"],
+  "scenes": [
+    { "url": "https://binaywebsites.pages.dev/", "voiceover": "Get your business online in days." },
+    {
+      "voiceover": "Pick your type of business and see your website live.",
+      "actions": [
+        { "scroll": "#examples", "ms": 1200 },
+        { "click": "#tabs > button:nth-child(2)", "ms": 1300 },
+        { "click": "#tabs > button:nth-child(3)", "ms": 1300 }
+      ]
+    },
+    { "caption": "Calls, WhatsApp and bookings", "actions": [{ "scroll": "#included", "ms": 1300 }] },
+    { "caption": "Simple prices", "actions": [{ "scroll": "#pricing", "ms": 1200 }, { "zoom": ".plan.pop", "scale": 1.5, "ms": 2200 }] },
+    { "caption": "One real person, start to finish", "formats": ["16x9"], "actions": [{ "scroll": "text=You deal with one real person", "ms": 1300 }, { "hover": "a[href=order]", "ms": 1200 }] }
+  ]
+}
