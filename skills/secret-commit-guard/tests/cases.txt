@@ -55,5 +55,5 @@ clean|const SECRET = /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-ant-[A-Za-z0-9_-]{
 clean|key="-----BEGIN {PRIV} KEY-----\nXXXX\nXXXX\n-----END {PRIV} KEY-----"
 private key|"private_key": "-----BEGIN {PRIV} KEY-----\n{LONGB64}\n-----END {PRIV} KEY-----\n"
 clean|GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-clean|OPENAI_API_KEY=sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+clean|OPENAI_API_KEY={OAIX}
 auth header|headers: { Authorization: `Bearer {B64}` }

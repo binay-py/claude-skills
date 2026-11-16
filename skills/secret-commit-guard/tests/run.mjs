@@ -14,7 +14,7 @@ const ok = (cond, msg) => { n++; if (!cond) { bad++; console.log('✘ ' + msg); 
 const r = (k, len, set = 'aB3xY9kLmN2pQ7rS5tUvW4zC8dE6fG1hJ0') => Array.from({ length: len }, (_, i) => set[(i * 7 + k) % set.length]).join('');
 const FAKE = {
   GH: 'ghp_' + 'A'.repeat(36), GHPAT: 'github' + '_pat_' + r(1, 50), AKIA: 'AKIA' + 'QWERTYUIOPASDFGH', AWSSECRET: r(2, 40),
-  ANT: 'sk-' + 'ant-api03-' + r(3, 40), OAI: 'sk-' + 'proj-' + r(4, 48), STRIPE: 'sk_' + 'live_' + r(5, 24), SLACK: 'xox' + 'b-' + '1234567890-' + r(6, 24),
+  ANT: 'sk-' + 'ant-api03-' + r(3, 40), OAI: 'sk-' + 'proj-' + r(4, 48), OAIX: 'sk-' + 'proj-' + 'X'.repeat(40), STRIPE: 'sk_' + 'live_' + r(5, 24), SLACK: 'xox' + 'b-' + '1234567890-' + r(6, 24),
   GOOGLE: 'AI' + 'za' + r(7, 35), NPM: 'npm' + '_' + r(8, 36), HF: 'hf' + '_' + r(9, 34), JWT: 'ey' + 'J' + r(10, 20) + '.ey' + 'J' + r(11, 30) + '.' + r(12, 20),
   RSA: 'RSA', PRIV: 'PRIVATE', PW: 'Pq7' + 'zLm2Vx9', PW2: 'Tr0ub4dor' + '-and-3', PW3: 'q8Zr2' + 'mXv9Lk', PW4: 's3cr3t' + '-value-99', B64: r(13, 32), HEX: r(14, 40, '0123456789abcdef'), LONGB64: r(15, 600),
 };

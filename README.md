@@ -18,6 +18,7 @@ A collection of 27 skills for [Claude Code](https://claude.com/claude-code). Som
 - [Skills](#skills): [Safety](#safety) · [Usage and cost](#usage-and-cost) · [Websites](#websites) · [Repositories, games and extensions](#repositories-games-and-extensions) · [Media](#media) · [Freelance and browser](#freelance-and-browser)
 - [Examples](#examples)
 - [Design principles](#design-principles)
+- [Security](#security)
 - [Contributing](#contributing)
 
 ## Installation
@@ -35,18 +36,29 @@ Or copy a single folder from `skills/` into `~/.claude/skills/`. Each skill is a
 node skills/site-qa/scripts/site-qa.mjs https://example.com
 ```
 
-Claude picks a skill from a normal request. For example, *"Is my Claude Code setup leaking any secrets?"* uses claude-safety-audit, and *"Where are my usage limits going?"* uses claude-token-audit.
+Claude picks a skill from a normal request, so you don't need to remember the names. Some things to try first:
+
+| Ask Claude | Skill it uses |
+|---|---|
+| *"Is my Claude Code setup leaking any secrets?"* | claude-safety-audit |
+| *"Where are my usage limits going?"* | claude-token-audit |
+| *"Check my site before I send it to the client"* | site-qa |
+| *"Why does my link show no image on WhatsApp?"* | link-preview-check |
+| *"Make a GIF of this terminal demo for the README"* | gif-maker |
+
+To remove everything: `/plugin uninstall binay-skills@binay-skills`.
 
 ### Requirements
 
 | Needed for | Requirement |
 |---|---|
 | All skills | Node.js 22 or newer. No npm packages are installed. |
-| site-qa, visual-diff, gif-maker | Chrome, Edge, Brave or Chromium (run headless with a temporary profile) |
+| site-qa, visual-diff, pwa-check, gif-maker | Chrome, Edge, Brave or Chromium (run headless with a temporary profile) |
 | gif-maker, event-recap-video | ffmpeg |
 | thumbnail-maker, event-recap-video | Python 3 with Pillow |
+| lean (`lean_check.py`) | Python 3 |
 | claude-sandbox | Docker |
-| cf-pages-deploy | A Cloudflare account (wrangler runs through `npx`) |
+| cf-pages-deploy, cf-backup | A Cloudflare account (wrangler runs through `npx`) |
 
 ## Enabling the hooks
 
@@ -170,11 +182,16 @@ Type: **Hook** runs automatically once enabled · **CLI** is a script Claude (or
 - **Read-only by default.** Anything that changes files or settings needs an explicit flag and keeps a backup.
 - **Secrets stay hidden.** Tools that look for keys never print more than the first few characters.
 - **Hooks never trap you.** They fail open, and read-guard always allows a repeated request.
-- **Tested on real projects.** Each skill was run against real repositories and sites before release. Three include test suites you can run (`node tests/run.mjs`).
+- **Nothing phones home.** No telemetry. The few skills that use the network only contact the service they're about (npm/PyPI, Cloudflare, the URL you gave). The full list is in [SECURITY.md](SECURITY.md#what-the-skills-send-over-the-network).
+- **Tested on real projects.** Each skill was run against real repositories and sites before release. Seven skills and the plugin hooks have test suites (`node skills/<name>/tests/run.mjs`), and CI runs them on Windows, macOS and Linux on every push.
+
+## Security
+
+Found a way past one of the guards, or a skill leaking something it shouldn't? Report it privately under **Security → Report a vulnerability**, not in a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Bug reports and pull requests are welcome. Every push is tested on Windows, macOS and Linux. See [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules and how to run the tests.
+Bug reports and pull requests are welcome. Every push is tested on Windows, macOS and Linux. See [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules and how to run the tests, and the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Community
 
