@@ -36,6 +36,19 @@ Title, label and reel lines with Nepali/Hindi (alone or mixed with English) are 
 - `edit.json` keys: `title, subtitle, closing, closing_sub, title_bg / closing_bg` (+ `_bg_at` for video ids), `music` / `vertical_music`, `music_volume, duck_volume, ambient_volume, photo_seconds, hook_xf, closing_seconds, horizontal_hook, horizontal, vertical_hook, vertical`. Segment: `{"id", "at" (0–1 centre) | "start", "dur", "speech", "label", "xf"}`.
 - `python work/shortlist.py` → `output/shortlist.jpg` (a frame at every cut). Show it to the user before rendering.
 
+## Make it perform (defaults from docs/video-playbook.md)
+- **Hook in the first 1.5 s:** frame 0 already shows the subject plus 3-7 words of hook text (never a black or logo-only first frame). Show the real thing (people, product, the moment) by 3 s.
+- **Pace:** something changes on screen at least every 3 s; add a fresh visual + sound at ~40% and ~70% of the runtime. Shorts/Reels: keep it under 45 s unless the content truly holds.
+- **Text:** burned-in captions (most people watch muted), 1-3 words per chunk, ≥72 px, heavy weight, 6 px outline. On 9:16 keep all text inside x 65-890, y 250-1440 so the platform's buttons and captions don't cover it.
+- **Ending:** one call to action in the last 3 s, end within 1 s of it, and make the last frame match the first so replays loop (YouTube counts replays as views).
+- **Audio:** music ducked 18-24 dB under voice; final mix `loudnorm=I=-14:TP=-1:LRA=11`. Only royalty-free music; a Short over 60 s with any Content ID claim is blocked.
+- **Export:** H.264 high, yuv420p, CRF 18, keyframe every 0.5 s (`-g fps/2`), `-movflags +faststart`, AAC 48 kHz. Fiverr gig videos: ≤ 75 s, ≤ 50 MB, no contact details.
+
+## Keep it cheap (tokens)
+- Review a render with ONE small contact sheet (`ffmpeg -i out.mp4 -vf "fps=10/DURATION,scale=216:-1,tile=5x2" -frames:v 1 sheet.png`), not individual frames.
+- Check length, size, fps and loudness with numbers (`ffprobe`, `ebur128`) instead of looking.
+- Change the edit/storyboard JSON and re-render; don't rewrite scripts. Don't print ffmpeg logs (`-loglevel error`).
+
 ## 4. Render and QC
 - `python build.py [horizontal|vertical|vertical-full]` — per-segment cache in `work/seg`, xfade chain, loudnorm −14 LUFS, x264.
 - `EDIT=other.json OUT_SUFFIX=-v2 python build.py` renders an alternative edit without touching the main one.
