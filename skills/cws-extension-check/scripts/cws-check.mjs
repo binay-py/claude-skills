@@ -290,7 +290,7 @@ for (const [f, text] of TEXT) {
   if (!/\.html?$/i.test(f)) continue;
   const sandbox = sandboxPages.has(f), ui = uiPages.has(f);
   const local = ref => urlRel(f, ref) ?? ref;
-  for (const t of text.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+  for (const t of text.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)) {
     const attrs = t[1], src = attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1], type = attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i)?.[1]?.toLowerCase();
     if (src) {
       if (REMOTE.test(src)) (sandbox ? warn : block)('remote-script', `${at(f, text, t.index)}: <script src="${src}"> loads code from the internet. MV3 bans remotely hosted code: download it into the package`, 'Blue Argon');

@@ -66,7 +66,7 @@ if (job) {
   const STOP = new Set('the a an and or to of in for on with is are be will you your we our i my it this that need needs looking want have has from as at by can should must would like who what any some all more just also get site website app project work job help great good let show make use using within week weeks day days must very well already new please thanks'.split(' '));
   // drop sentence-final dots ("android." -> "android"); match c++/node.js without \b, which fails next to + and .
   const terms = [...new Set((job.toLowerCase().match(/[a-z][a-z0-9+#.-]{2,}/g) || []).map(w => w.replace(/[.-]+$/, '')).filter(w => w.length > 2 && !STOP.has(w)))];
-  const freq = terms.map(t => [t, (job.toLowerCase().match(new RegExp(`(?<![a-z0-9])${t.replace(/[.+#]/g, '\\$&')}(?![a-z0-9])`, 'g')) || []).length]).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
+  const freq = terms.map(t => [t, (job.toLowerCase().match(new RegExp(`(?<![a-z0-9])${t.replace(/[.*+?^${}()|[\]\\#]/g, '\\$&')}(?![a-z0-9])`, 'g')) || []).length]).sort((a, b) => b[1] - a[1]).slice(0, 12).map(x => x[0]);
   const used = freq.filter(t => text.toLowerCase().includes(t));
   if (used.length < Math.min(4, freq.length / 2)) hit(12, 'high', `Barely references the job post. Its key terms: ${freq.join(', ')}. You mention: ${used.join(', ') || 'none'}. Show you read it: name their stack, problem or deadline.`);
 }

@@ -223,7 +223,7 @@ const redact = t => { let s = String(t); for (const [re] of SECRETS) s = s.repla
 // the most useful stderr line: skip stack frames and the "Node.js vX" footer, prefer the "XxxError: message" line
 // (Node prints the throwing source line, e.g. "throw new ERR_MODULE_NOT_FOUND(...)", before it), then one that names an error
 const errLine = e => { const l = String(e).split(/\r?\n/).map(x => x.trim()).filter(x => x && !/^(at |Node\.js v|\^+$|node:)/.test(x)); return redact(l.find(x => /^[\w.]*(Error|Exception)\b/.test(x)) || l.find(x => /error|ERR_|not found|cannot|denied|refused/i.test(x)) || l.pop() || ''); };
-const quoteWin = a => /^[A-Za-z0-9_\-.:\\/@=+,]+$/.test(a) ? a : `"${String(a).replace(/"/g, '\\"')}"`;
+const quoteWin = a => /^[A-Za-z0-9_\-.:\\/@=+,]+$/.test(a) ? a : `"${String(a).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`;
 function killTree(child) { try { if (WIN) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); else process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch {} } }
 
 function measureStdio(s) {

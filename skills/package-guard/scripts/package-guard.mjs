@@ -120,7 +120,7 @@ function fromTokens(t, ctx) {
     const names = [];
     for (let i = 0; i < args.length; i++) {
       const a = args[i];
-      if (CUSTOM_INDEX.test(a) && !/registry\.npmjs\.org|pypi\.org\/simple/.test(a + ' ' + (args[i + 1] || ''))) return []; // private/custom index: not ours to judge
+      if (CUSTOM_INDEX.test(a) && !urlsIn(a + ' ' + (args[i + 1] || '')).some(isOfficial)) return []; // private/custom index: not ours to judge
       if (a === '--') { if (opts.stopAtDashDash) break; continue; }
       if (a.startsWith('-')) { if (!a.includes('=') && (valFlags.test(a) || CUSTOM_INDEX.test(a))) i++; continue; }
       names.push(a); if (opts.first) break;
@@ -201,23 +201,32 @@ export function parseCommand(cmd, cwd = process.cwd(), depth = 0) {
   return found.filter(p => { const k = p.eco + ':' + (p.eco === 'pypi' ? pyNorm(p.name) : p.name); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
+// The public registries, compared by exact hostname: a substring test would also accept
+// registry.npmjs.org.evil.example or evil.example/registry.npmjs.org.
+function isOfficial(u) {
+  let host = '';
+  try { host = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : 'https://' + u).hostname.toLowerCase(); } catch { return false; }
+  return host === 'registry.npmjs.org' || host === 'pypi.org';
+}
+function urlsIn(s) { return s.match(/(?:https?:\/\/)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:\/[^\s'"]*)?/gi) || []; }
+
 // private registries configured outside the command: leave those packages alone
 function privateRegistry(eco, name, cwd) {
-  if (eco === 'pypi') return [process.env.PIP_INDEX_URL, process.env.UV_INDEX_URL, process.env.UV_DEFAULT_INDEX].some(u => u && !/pypi\.org/.test(u));
-  if (process.env.npm_config_registry && !/registry\.npmjs\.org/.test(process.env.npm_config_registry)) return true;
+  if (eco === 'pypi') return [process.env.PIP_INDEX_URL, process.env.UV_INDEX_URL, process.env.UV_DEFAULT_INDEX].some(u => u && !isOfficial(u));
+  if (process.env.npm_config_registry && !isOfficial(process.env.npm_config_registry)) return true;
   const scope = name.startsWith('@') ? name.split('/')[0] : null;
   for (let d = cwd; ; d = path.dirname(d)) {
     for (const f of [path.join(d, '.npmrc')]) {
       let txt = ''; try { txt = fs.readFileSync(f, 'utf8'); } catch { continue; }
       for (const line of txt.split(/\r?\n/)) {
         const m = line.match(/^\s*(@[\w.-]+:)?registry\s*=\s*(\S+)/); if (!m) continue;
-        if (/registry\.npmjs\.org/.test(m[2])) continue;
+        if (isOfficial(m[2])) continue;
         if (!m[1] || (scope && m[1] === scope + ':')) return true;
       }
     }
     if (path.dirname(d) === d) break;
   }
-  try { const txt = fs.readFileSync(path.join(os.homedir(), '.npmrc'), 'utf8'); for (const line of txt.split(/\r?\n/)) { const m = line.match(/^\s*(@[\w.-]+:)?registry\s*=\s*(\S+)/); if (m && !/registry\.npmjs\.org/.test(m[2]) && (!m[1] || (scope && m[1] === scope + ':'))) return true; } } catch {}
+  try { const txt = fs.readFileSync(path.join(os.homedir(), '.npmrc'), 'utf8'); for (const line of txt.split(/\r?\n/)) { const m = line.match(/^\s*(@[\w.-]+:)?registry\s*=\s*(\S+)/); if (m && !isOfficial(m[2]) && (!m[1] || (scope && m[1] === scope + ':'))) return true; } } catch {}
   return false;
 }
 

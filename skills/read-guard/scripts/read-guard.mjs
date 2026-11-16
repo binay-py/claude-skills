@@ -61,7 +61,7 @@ function judgeCommand(cmd, cwd, { stateless = false } = {}) {
     const parts = seg.split('|').map(s => s.trim()); const first = parts[0].replace(/\s+\d?>&\d\b|\s+2>\s*\S+/g, ''); // 2>&1, 2>/dev/null still print the file
     const cd = first.match(/^(?:cd|Set-Location|pushd|sl)\s+("[^"]+"|'[^']+'|\S+)\s*$/i);
     if (cd) { dir = toPath(dir, cd[1]); continue; }
-    const m = first.match(/^(?:cat|type|more|Get-Content|gc)\s+((?:"[^"]+"|'[^']+'|[^\s|;&<>]+)(?:\s+(?:"[^"]+"|'[^']+'|[^\s|;&<>]+))*)\s*$/i);
+    const m = first.match(/^(?:cat|type|more|Get-Content|gc)\s+((?:"[^"]+"|'[^']+'|[^\s|;&<>"']+)(?:\s+(?:"[^"]+"|'[^']+'|[^\s|;&<>"']+))*)\s*$/i);
     if (!m) continue;
     // piped into another program (head, grep, node script.js…): that program decides what's printed. Only when every
     // program after the pipe passes all lines through (sort, tee, cat…) does the whole file still get dumped.

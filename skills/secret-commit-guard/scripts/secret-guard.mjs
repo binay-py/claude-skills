@@ -91,7 +91,7 @@ const LOCKFILES = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnp
 function globRe(g) {
   let s = g.trim().replace(/\\/g, '/'); const dir = s.endsWith('/'); if (dir) s = s.slice(0, -1);
   const anchored = s.includes('/'); s = s.replace(/^\//, '');
-  const body = s.replace(/[.+^${}()|[\]]/g, '\\$&').replace(/\*\*\/?/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\u0000/g, '(?:.*/)?');
+  const body = s.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/?/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\u0000/g, '(?:.*/)?');
   return new RegExp((anchored ? '^' : '(^|/)') + body + (dir ? '/' : '(/|$)'));
 }
 function loadIgnore(root) {

@@ -58,7 +58,8 @@ for (let i = 0; i < masked.length; i++) {
   if (m) headings.push({ level: +m[1], text: m[2], line: i + 1, html: true });
 }
 // GitHub-style slugs
-const plain = s => s.replace(/<[^>]+>/g, '').replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1').replace(/`([^`]*)`/g, '$1').replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(^|\W)[*_](\S.*?\S|\S)[*_](?=\W|$)/g, '$1$2').replace(/~~(.*?)~~/g, '$1');
+const stripTags = s => { for (let p; p !== s;) { p = s; s = s.replace(/<[^>]+>/g, ''); } return s; }; // repeat: <<b>i> leaves no tag behind
+const plain = s => stripTags(s).replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1').replace(/`([^`]*)`/g, '$1').replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(^|\W)[*_](\S.*?\S|\S)[*_](?=\W|$)/g, '$1$2').replace(/~~(.*?)~~/g, '$1');
 const slugify = s => plain(s).trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replace(/ /g, '-');
 function anchorsOf(mdLines, hs) {
   const set = new Set(), count = new Map();
@@ -79,7 +80,7 @@ function anchorsOfFile(f) {
 // ---------- title + description ----------
 const isBadgeLine = l => /^\s*(\[?!\[[^\]]*\]\([^)]*\)\]?(\([^)]*\))?\s*)+$/.test(l) || /^\s*(<a [^>]*>\s*)?<img [^>]*>(\s*<\/a>)?\s*$/i.test(l);
 const firstH = headings[0];
-const contentStart = lines.findIndex(l => l.trim() && !/^\s*<!--.*-->\s*$/.test(l) && !isBadgeLine(l) && !/^\s*<\/?(p|div|picture|source|br)\b[^>]*>\s*$/i.test(l));
+const contentStart = lines.findIndex(l => l.trim() && !/^\s*<!--.*--!?>\s*$/.test(l) && !isBadgeLine(l) && !/^\s*<\/?(p|div|picture|source|br)\b[^>]*>\s*$/i.test(l));
 // an HTML <h1> near the top (common in designed READMEs: <h1 align="center"><img alt="…"></h1>) counts as the title
 const htmlH1 = lines.slice(0, 15).some(l => /<h1\b/i.test(l));
 if (!htmlH1 && (!firstH || firstH.level !== 1 || firstH.line > Math.max(contentStart + 3, 12))) add('medium', firstH ? `the first heading (line ${firstH.line}) is not a level-1 title near the top: start with "# Project name"` : 'no title: start the README with "# Project name"');
@@ -89,7 +90,7 @@ if (!htmlH1 && (!firstH || firstH.level !== 1 || firstH.line > Math.max(contentS
   for (let i = from; i < Math.min(nextH - 1, from + 20, lines.length); i++) {
     const l = masked[i].trim();
     if (!l || isBadgeLine(l) || /^(#|<!--|\||[-=]+$)/.test(l) || /^<\/?\w+[^>]*>$/.test(l)) continue;
-    const t = plain(l).replace(/<[^>]+>/g, '').trim();
+    const t = stripTags(plain(l)).trim();
     if (t.length >= 20) { desc = t; break; }
   }
   if (!desc) add('medium', 'no one-line description under the title: add a sentence saying what it is and who it is for');
@@ -115,7 +116,7 @@ const licType = t => {
   if (/Redistribution and use in source and binary forms/i.test(t)) return /Neither the name/i.test(t) ? 'BSD-3-Clause' : 'BSD-2-Clause';
   return null;
 };
-const normLic = s => s.toUpperCase().replace(/[\s_-]+/g, '').replace(/LICENSE$/, '').replace(/^(GPL|AGPL|LGPL)V?(\d)(\.0)?$/, '$1$2').replace(/\.0$/, '').replace(/^APACHE2$/, 'APACHE2').replace(/CLAUSE$/, '');
+const normLic = s => s.toUpperCase().replace(/[\s_-]+/g, '').replace(/LICENSE$/, '').replace(/^(GPL|AGPL|LGPL)V?(\d)(\.0)?$/, '$1$2').replace(/\.0$/, '').replace(/CLAUSE$/, '');
 const fileLic = LICENSE_FILES.length ? licType(fs.readFileSync(path.join(root, LICENSE_FILES[0]), 'utf8')) : null;
 let pkg = null; try { pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')); } catch {}
 {
@@ -320,7 +321,7 @@ if (!opt.offline && remote.length) {
       else if (signedIn) { netStats.unverified++; add('info', `${what} ${u} — HTTP 404 to logged-out requests (GitHub shows this page only when signed in), unverified`, L.line); }
       else if (r.status === 429 || r.status === 999 || ((r.status === 403 || r.status === 401) && BOT_BLOCKERS.test(host))) { netStats.unverified++; add('info', `${what} ${u} — HTTP ${r.status}, unverified (this site blocks scripts; open it in a browser)`, L.line); }
       else if (r.status >= 400) { netStats.broken++; add(r.status === 404 || r.status === 410 ? 'high' : 'medium', `${what} ${u} — HTTP ${r.status}${r.status === 403 ? ' (may be bot blocking: check in a browser)' : r.status >= 500 ? ' (server error, may be temporary: recheck later)' : ''}`, L.line); }
-      else if ((badge || L.image) && r.type && !/^image\/|octet-stream/.test(r.type)) { netStats.broken++; add('medium', `${what} ${u} returns ${r.type.split(';')[0]}, not an image`, L.line); }
+      else if ((badge || L.image) && r.type && !/^(?:image\/|(?:application|binary)\/octet-stream)/.test(r.type)) { netStats.broken++; add('medium', `${what} ${u} returns ${r.type.split(';')[0]}, not an image`, L.line); }
       else netStats.ok++;
     }
   }));

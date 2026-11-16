@@ -198,7 +198,9 @@ function imageSize(b) {
     return { type: 'jpeg' };
   }
   if (b.length > 6 && b.readUInt16LE(0) === 0 && b.readUInt16LE(2) === 1) return { type: 'ico', w: b[6] || 256, h: b[7] || 256 };
-  if (/^(\uFEFF)?\s*(<\?xml[\s\S]*?\?>\s*)?(<!--[\s\S]*?-->\s*)*(<!doctype svg[^>]*>\s*)?<svg[\s>]/i.test(b.toString('utf8', 0, 4000))) return { type: 'svg' };
+  // drop the XML declaration, comments and doctype in linear passes, then the root must be <svg
+  const head = b.toString('utf8', 0, 4000).replace(/^\uFEFF/, '').replace(/<\?xml[^>]*>|<!--[\s\S]*?-->|<!doctype svg[^>]*>/gi, ' ');
+  if (/^<svg[\s>]/i.test(head.trimStart())) return { type: 'svg' };
   if (/^\s*<(!doctype html|html|head|body)/i.test(b.toString('utf8', 0, 300))) return { type: 'html' };
   return { type: 'unknown' };
 }
@@ -737,7 +739,9 @@ async function analyzeSW(SW, servedOnReload) {
   for (const d of deps) { try { const r = await get(new URL(d, SW.scriptURL).href, 5e6); if (r.ok) src += '\n' + r.buf.toString('utf8'); } catch {} }
   const fetchListener = /addEventListener\(\s*['"`]fetch['"`]/.test(src) || /\bonfetch\s*=/.test(src);
   const workbox = /workbox|precacheAndRoute|__WB_MANIFEST/i.test(src);
-  const empty = /addEventListener\(\s*['"`]fetch['"`]\s*,\s*(?:(?:async\s*)?function\s*\w*\s*\([^)]*\)|(?:async\s*)?\(?[\w\s,]*\)?\s*=>)\s*\{\s*(?:\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*\}\s*\)/.test(src);
+  // strip comments first, so the handler test needs no nested quantifiers (no catastrophic backtracking)
+  const bare = src.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ' ');
+  const empty = /addEventListener\(\s*['"`]fetch['"`]\s*,\s*(?:(?:async\s+)?function\s*\w*\s*\([^)]*\)|(?:async\s*)?(?:\w+|\([^)]*\))\s*=>)\s*\{\s*\}\s*\)/.test(bare);
   SW.fetchHandler = fetchListener || servedOnReload > 0;
   SW.analysis = { fetchListener, workbox, emptyFetchHandler: empty, servedOnReload };
   if (empty) F(OFFLINE, 'sw-empty-fetch-handler', 'the fetch handler is empty: Chrome skips empty handlers, so nothing is served offline', 'call e.respondWith(...) with a cache fallback, or remove the handler and add real caching');
@@ -754,7 +758,7 @@ async function analyzeSW(SW, servedOnReload) {
     const e = m[1].trim(), lit = e.match(/^(['"`])([^'"`$]*)\1$/);
     if (lit) names.add(lit[2]);
     else if (/^[A-Za-z_$][\w$.]*$/.test(e)) {
-      const def = src.match(new RegExp(`(?:const|let|var)\\s+${e.split('.').pop().replace(/\$/g, '\\$')}\\s*=\\s*(['"\`])([^'"\`]*)\\1`));
+      const def = src.match(new RegExp(`(?:const|let|var)\\s+${e.split('.').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=\\s*(['"\`])([^'"\`]*)\\1`));
       if (def && !def[2].includes('${')) names.add(def[2]); else dynamic = true;
     } else dynamic = true;
   }

