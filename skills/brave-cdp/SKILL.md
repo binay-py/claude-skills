@@ -26,6 +26,13 @@ node cdp.mjs cleanup                           # close tabs left by jobs that we
 node cdp.mjs relay                             # optional: keep one connection open
 ```
 
+## Record mode
+`node cdp.mjs record <url> --out job.mjs` (or `--match <url-part>` for an open tab) opens a visible tab with a red "Recording" badge. The user clicks through the task; pressing the badge (or closing the tab, or Ctrl+C) writes a job script that `run` replays in the background.
+- Records clicks, typing, Enter/Escape, dropdown choices and URLs typed in the address bar. Clicks on plain page areas are skipped.
+- Elements are found by id, test-id, name, aria-label or href first, then by visible text, then by position.
+- Passwords, card numbers and one-time codes are never written to the file. The script reads them from `JOB_*` environment variables and its header lists which.
+- File uploads are left as a commented line to fill in.
+
 ## MCP server (browser tools without job scripts)
 `scripts/mcp.mjs` is a zero-dependency MCP server with 14 tools: `browser_open`, `browser_tabs`, `browser_navigate`, `browser_read`, `browser_click`, `browser_type`, `browser_key`, `browser_scroll`, `browser_wait`, `browser_screenshot`, `browser_eval`, `browser_show`, `browser_close`, `browser_extension`.
 ```

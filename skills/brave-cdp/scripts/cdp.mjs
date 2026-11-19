@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { extensions, printReload, formatErrors, watch } from './ext.mjs';
+import { record } from './record.mjs';
 
 const RELAY_PORT = Number(process.env.CDP_RELAY_PORT || 9333);
 // one token file per relay port, so a second relay (or a test one) never overwrites a running relay's token
@@ -447,6 +448,7 @@ async function relay() {
 
 // ---------- CLI ----------
 const USAGE = `usage: node cdp.mjs tabs | eval "<js>" [--match <url-part>] | run job.mjs [args...] | cleanup [--all] | relay
+       node cdp.mjs record [url] [--match <url-part>] [--out job.mjs]   click through a task, get a job script
        node cdp.mjs ext list
        node cdp.mjs ext reload <id | folder | name> [--tabs]   reload and print new errors (--tabs: also reload the pages its content scripts run on)
        node cdp.mjs ext errors <id | folder | name> [--clear]
@@ -454,7 +456,7 @@ const USAGE = `usage: node cdp.mjs tabs | eval "<js>" [--match <url-part>] | run
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   if (cmd === 'relay') return relay();
-  if (!['tabs', 'eval', 'run', 'cleanup', 'ext'].includes(cmd)) {
+  if (!['tabs', 'eval', 'run', 'cleanup', 'ext', 'record'].includes(cmd)) {
     console.log(USAGE); process.exit(1);
   }
   const cdp = await connect();
@@ -475,6 +477,11 @@ async function main() {
       finally { await p.close(); } // closes the blank tab, or detaches from the matched one; also when the expression throws
     }
     if (cmd === 'ext') await extCli(cdp, rest);
+    if (cmd === 'record') {
+      const opt = f => { const i = rest.indexOf(f); return i >= 0 ? rest[i + 1] : undefined; };
+      const url = rest[0] && !rest[0].startsWith('--') ? rest[0] : undefined;
+      await record(cdp, o => page(cdp, o), { url: url || 'about:blank', match: opt('--match'), out: opt('--out') || 'recorded-job.mjs' });
+    }
     if (cmd === 'run') {
       const job = await import(pathToFileURL(path.resolve(rest[0])).href);
       const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a);

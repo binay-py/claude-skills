@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { matchPattern, expandPath, formatErrors } from '../scripts/ext.mjs';
+import { toJob } from '../scripts/record.mjs';
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log('ok', name); };
