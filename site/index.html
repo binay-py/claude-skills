@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-skills: guardrails for Claude Code</title>
+<meta name="description" content="Free Claude Code plugin: hooks that block rm -rf ~ and hallucinated npm packages, plus 24 tested tools for websites, extensions, repos and media. MIT, no dependencies.">
+<meta property="og:title" content="Claude Code can't rm -rf your home folder anymore">
+<meta property="og:description" content="Free plugin: four safety hooks that turn on at install, plus 24 tested tools. MIT, no dependencies.">
+<meta property="og:image" content="https://binay-claude-skills.pages.dev/og.png">
+<meta property="og:url" content="https://binay-claude-skills.pages.dev/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161a'/%3E%3Cpath d='M8 11l6 5-6 5' stroke='%23f2a900' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16 22h8' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f6f7f9; --ink: #14161a; --dim: #5b616b; --line: #dfe2e7; --card: #ffffff;
+    --amber: #f2a900; --amber-ink: #3d2b00; --green: #1f9d55; --term: #14161a; --term-dim: #8b929c; --red: #e5484d;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --paper: #101215; --ink: #eceef1; --dim: #9aa1ab; --line: #262a30; --card: #171a1e; --term: #0a0b0d; } }
+  :root[data-theme="dark"] { --paper: #101215; --ink: #eceef1; --dim: #9aa1ab; --line: #262a30; --card: #171a1e; --term: #0a0b0d; }
+  * { box-sizing: border-box; }
+  html, body { overflow-x: clip; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 4px; }
+
+  .top { display: flex; justify-content: space-between; align-items: center; padding: 22px 0; font-size: 15px; }
+  .top b { font-weight: 600; }
+  .top nav { display: flex; gap: 18px; }
+  .top nav a { text-decoration: none; color: var(--dim); } .top nav a:hover { color: var(--ink); }
+
+  h1 { font-size: clamp(34px, 6.4vw, 54px); line-height: 1.06; letter-spacing: -.025em; font-weight: 700; margin: 48px 0 18px; max-width: 15ch; }
+  h1 code { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: .86em; background: var(--amber); color: var(--amber-ink); padding: 0 .18em; border-radius: 6px; white-space: nowrap; }
+  .lede { font-size: 19px; color: var(--dim); max-width: 58ch; margin: 0 0 28px; }
+
+  .install { display: flex; align-items: stretch; border: 1px solid var(--line); background: var(--card); border-radius: 10px; overflow: hidden; max-width: 560px; }
+  .install pre { margin: 0; padding: 14px 16px; flex: 1; min-width: 0; font: 14px/1.7 "IBM Plex Mono", monospace; overflow-x: auto; }
+  .install pre span { color: var(--dim); user-select: none; }
+  .copy { border: 0; border-left: 1px solid var(--line); background: none; color: var(--ink); font: 500 14px "IBM Plex Sans", sans-serif; padding: 0 18px; cursor: pointer; }
+  .copy:hover { background: var(--paper); }
+  .sub { overflow-wrap: anywhere; font-size: 14px; color: var(--dim); margin: 10px 0 0; }
+
+  /* terminal */
+  .term { margin: 56px 0 0; background: var(--term); color: #e8eaed; border-radius: 12px; font: 14px/1.75 "IBM Plex Mono", monospace; overflow: hidden; box-shadow: 0 24px 60px -30px rgba(0,0,0,.45); }
+  .term-bar { display: flex; gap: 7px; padding: 12px 14px; border-bottom: 1px solid #23272d; }
+  .term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #2c3138; }
+  .term-body { padding: 18px 20px 22px; min-height: 330px; overflow-x: auto; }
+  .ln { white-space: pre-wrap; padding-left: 2ch; text-indent: -2ch; opacity: 0; }
+  .ln.on { opacity: 1; }
+  .who { color: var(--term-dim); }
+  .gap { background: var(--red); color: #fff; border-radius: 3px; padding: 0 1px; }
+  .blk { color: #14161a; background: var(--amber); font-weight: 600; padding: 0 6px; border-radius: 3px; }
+  .ok { color: #14161a; background: #3ccf7f; font-weight: 600; padding: 0 6px; border-radius: 3px; }
+  .why { color: #f7c948; }
+  .muted { color: var(--term-dim); }
+  .cap { font-size: 14px; color: var(--dim); margin: 12px 0 0; }
+  .replay { background: none; border: 0; color: var(--dim); text-decoration: underline; font: inherit; cursor: pointer; padding: 0; }
+
+  h2 { font-size: 28px; letter-spacing: -.015em; line-height: 1.2; margin: 88px 0 8px; }
+  .h2-sub { color: var(--dim); margin: 0 0 28px; max-width: 60ch; }
+
+  .hooks { border-top: 1px solid var(--line); }
+  .hook { display: grid; grid-template-columns: 190px 1fr; gap: 6px 24px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+  .hook b { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 15px; }
+  .hook p { margin: 0; }
+  .hook small { display: block; color: var(--dim); font-size: 14px; margin-top: 4px; }
+
+  .groups { display: grid; grid-template-columns: 1fr 1fr; gap: 36px 40px; }
+  .groups h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
+  .groups ul { list-style: none; margin: 0; padding: 0; }
+  .groups li { padding: 7px 0; font-size: 15px; line-height: 1.45; }
+  .groups li a { font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 500; text-decoration: none; border-bottom: 1px solid var(--line); }
+  .groups li a:hover { border-color: var(--ink); }
+  .groups li span { display: block; color: var(--dim); }
+
+  .rules { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 18px 40px; }
+  .rules li b { display: block; }
+  .rules li { color: var(--dim); font-size: 15px; } .rules li b { color: var(--ink); font-size: 16px; }
+
+  .end { margin: 96px 0 0; padding: 40px 0 56px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: center; }
+  .btn { display: inline-block; background: var(--ink); color: var(--paper); text-decoration: none; font-weight: 600; padding: 12px 22px; border-radius: 99px; }
+  .btn:hover { opacity: .88; }
+  .end p { margin: 0; color: var(--dim); font-size: 14px; }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    .top nav a:not(:last-child) { display: none; }
+    h1 { margin-top: 28px; }
+    .hook { grid-template-columns: 1fr; }
+    .groups, .rules { grid-template-columns: 1fr; }
+    .term { margin-left: -20px; margin-right: -20px; border-radius: 0; }
+    .term-body { font-size: 12.5px; padding: 14px 16px 18px; }
+    .install pre { font-size: 12.5px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ln { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <b>claude-skills</b>
+    <nav><a href="#hooks">Hooks</a><a href="#tools">Tools</a><a href="https://github.com/binay-py/claude-skills">GitHub</a></nav>
+  </header>
+
+  <h1>Claude Code can't <code>rm&nbsp;-rf&nbsp;~</code> your machine anymore.</h1>
+  <p class="lede">A free plugin with four safety hooks that turn on the moment you install it, plus 24 tested tools for shipping websites, extensions, repos and videos. MIT licensed, no npm dependencies.</p>
+
+  <div class="install">
+    <pre id="cmd"><span>&gt; </span>/plugin marketplace add binay-py/claude-skills
+<span>&gt; </span>/plugin install binay-skills@binay-skills</pre>
+    <button class="copy" id="copy" aria-label="Copy install commands">Copy</button>
+  </div>
+  <p class="sub">Paste both lines into Claude Code. Needs Node.js 22 or newer. Remove with <code>/plugin uninstall binay-skills@binay-skills</code>.</p>
+
+  <div class="term" aria-label="Terminal replay: a stray-space rm -rf and a hallucinated npm package are both blocked; npm install stripe succeeds.">
+    <div class="term-bar"><i></i><i></i><i></i></div>
+    <div class="term-body" id="term">
+<div class="ln"><span class="who">you ›</span> delete the old build folder and add stripe</div>
+<div class="ln"> </div>
+<div class="ln"><span class="who">  Bash(</span>rm -rf ~<span class="gap"> </span>/old-build<span class="who">)</span></div>
+<div class="ln">  <span class="blk">BLOCKED</span> <span class="why">bash-checkpoint: recursive delete of your home folder</span></div>
+<div class="ln muted">  a stray space made that "~" and "/old-build". Your home folder is still there.</div>
+<div class="ln"><span class="who">  Bash(</span>rm -rf old-build<span class="who">)</span></div>
+<div class="ln">  <span class="ok">RAN</span> <span class="muted">files were snapshotted first; checkpoint.mjs restore puts them back</span></div>
+<div class="ln"> </div>
+<div class="ln"><span class="who">  Bash(</span>npm install stripe-node-sdk<span class="who">)</span></div>
+<div class="ln">  <span class="blk">BLOCKED</span> <span class="why">package-guard: npm:stripe-node-sdk does not exist, possibly a hallucinated name</span></div>
+<div class="ln"><span class="who">  Bash(</span>npm install stripe<span class="who">)</span></div>
+<div class="ln">  <span class="ok">OK</span> <span class="muted">npm:stripe · 33.7M downloads a week</span></div>
+    </div>
+  </div>
+  <p class="cap">Real hook output, replayed. Both are mistakes AI agents really make. <button class="replay" id="replay">Replay</button></p>
+
+  <h2 id="hooks">Four hooks, on at install</h2>
+  <p class="h2-sub">They run before Claude's commands, not after. If a hook ever errors, the command runs normally, so they can't lock you out.</p>
+  <div class="hooks">
+    <div class="hook"><b>bash-checkpoint</b><p>Blocks commands that wipe your home folder or a drive, asks before <code>git push --force</code> and <code>reset --hard</code>, and snapshots files before every <code>rm</code>, <code>mv</code> or <code>git clean</code> so you can put them back.<small>Bash and PowerShell, Windows, macOS, Linux</small></p></div>
+    <div class="hook"><b>package-guard</b><p>Checks every <code>npm install</code> and <code>pip install</code> against the real registries. Packages that don't exist are blocked; typosquats and days-old packages need your OK.<small>npm and PyPI</small></p></div>
+    <div class="hook"><b>read-guard</b><p>Stops Claude from loading a huge file whole and burning your usage limit. It points to a search or a partial read instead, and lets a repeated request through.<small>Read, Bash, PowerShell</small></p></div>
+    <div class="hook"><b>session-handoff</b><p>Warns when a session passes 150k tokens and writes a handoff note, so you can continue in a fresh, cheaper session without losing the thread.<small>Runs when Claude stops</small></p></div>
+  </div>
+
+  <h2 id="tools">24 more tools</h2>
+  <p class="h2-sub">Ask in plain words and Claude picks the right one. Each is a script you can also run yourself.</p>
+  <div class="groups">
+    <section><h3>Safety and cost</h3><ul>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/claude-safety-audit">claude-safety-audit</a><span>Keys saved in permission rules, settings committed to git, rules like Bash(*)</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/secret-commit-guard">secret-commit-guard</a><span>Pre-commit hook that stops keys reaching git</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/claude-sandbox">claude-sandbox</a><span>Claude Code in Docker that can see one folder</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/claude-token-audit">claude-token-audit</a><span>Where your usage limit goes, by project and tool</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/lean">lean</a><span>Token-lean mode and a check of what loads every session</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/mcp-audit">mcp-audit</a><span>Duplicate, failing and costly MCP servers</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/claude-md-doctor">claude-md-doctor</a><span>CLAUDE.md and memory files over the size limits</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/cf-backup">cf-backup</a><span>Read-only backups of Cloudflare D1 and KV</span></li>
+    </ul></section>
+    <section><h3>Websites</h3><ul>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/site-qa">site-qa</a><span>Broken links, JS errors and mobile overflow, with screenshots</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/link-preview-check">link-preview-check</a><span>How a link looks on WhatsApp, LinkedIn and X</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/pwa-check">pwa-check</a><span>Does it install, does it work offline</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/visual-diff">visual-diff</a><span>Before and after screenshots with changes marked</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/cf-pages-deploy">cf-pages-deploy</a><span>Deploy to Cloudflare Pages and verify the live files</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/env-doctor">env-doctor</a><span>Env vars the code reads but .env doesn't set</span></li>
+    </ul></section>
+    <section><h3>Repos, extensions and games</h3><ul>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/cws-extension-check">cws-extension-check</a><span>Chrome Web Store rules checked before you upload</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/release-notes">release-notes</a><span>CHANGELOG entries from git history</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/readme-upgrade">readme-upgrade</a><span>Runs your README's commands to see if they work</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/itch-html5-package">itch-html5-package</a><span>itch.io upload rules and the zip</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/brave-cdp">brave-cdp</a><span>Claude drives your own browser on one connection</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/freelance-proposal">freelance-proposal</a><span>Proposals from your real work, scored before you send</span></li>
+    </ul></section>
+    <section><h3>Media</h3><ul>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/promo-video">promo-video</a><span>Your site recorded in a phone, as a Reel and a 16:9 cut</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/gif-maker">gif-maker</a><span>Sharp, small GIFs for READMEs and docs</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/thumbnail-maker">thumbnail-maker</a><span>YouTube and social thumbnails that stay readable</span></li>
+      <li><a href="https://github.com/binay-py/claude-skills/tree/master/skills/event-recap-video">event-recap-video</a><span>Event photos and clips into a recap and a reel</span></li>
+    </ul></section>
+  </div>
+
+  <h2>How they're built</h2>
+  <p class="h2-sub">The same rules apply to every skill.</p>
+  <ul class="rules">
+    <li><b>No dependencies</b>Node's standard library only. Nothing to npm install.</li>
+    <li><b>Read-only by default</b>Anything that changes files needs a flag and keeps a backup.</li>
+    <li><b>Nothing phones home</b>No telemetry. Network use is listed in SECURITY.md.</li>
+    <li><b>Tested on three systems</b>CI runs the suites on Windows, macOS and Linux on every push.</li>
+  </ul>
+
+  <footer class="end">
+    <a class="btn" href="https://github.com/binay-py/claude-skills">View on GitHub</a>
+    <p>MIT · made by <a href="https://binay.codes">Binay Bhandari</a> in Nepal</p>
+  </footer>
+</div>
+<script>
+  const lines = [...document.querySelectorAll('#term .ln')];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const delays = [400, 200, 700, 900, 250, 1000, 700, 200, 900, 900, 900, 700];
+  let timers = [];
+  function play() {
+    timers.forEach(clearTimeout); timers = [];
+    lines.forEach(l => l.classList.toggle('on', reduce));
+    if (reduce) return;
+    let t = 0;
+    lines.forEach((l, i) => { t += delays[i] || 500; timers.push(setTimeout(() => l.classList.add('on'), t)); });
+  }
+  play();
+  document.getElementById('replay').onclick = play;
+  document.getElementById('copy').onclick = async e => {
+    const txt = '/plugin marketplace add binay-py/claude-skills\n/plugin install binay-skills@binay-skills';
+    try { await navigator.clipboard.writeText(txt); e.target.textContent = 'Copied'; } catch { e.target.textContent = 'Select and copy'; }
+    setTimeout(() => e.target.textContent = 'Copy', 1800);
+  };
+</script>
+</body>
+</html>
