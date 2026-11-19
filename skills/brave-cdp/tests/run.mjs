@@ -47,4 +47,18 @@ t('format errors', () => {
   assert.equal(formatErrors({}), '');
 });
 
+t('record: job from actions, secrets never written', () => {
+  const j = toJob([
+    { type: 'click', selector: '#go', unique: true, text: 'Go' }, { type: 'navigated' },
+    { type: 'type', selector: '#pw', unique: true, secret: true, field: 'password', value: null },
+    { type: 'click', selector: 'div > button:nth-of-type(2)', unique: false, text: 'Save', tag: 'button' },
+    { type: 'key', key: 'Enter' },
+  ], { startUrl: 'https://x.test/' });
+  assert.match(j, /page\(\{ url: "https:\/\/x\.test\/" \}\)/);
+  assert.match(j, /process\.env\.JOB_PASSWORD/);
+  assert.match(j, /clickText\(p, "button", "Save"\)/);
+  assert.match(j, /readyState === 'complete'/);
+  new Function(j.replace(/^export default /m, 'return ')); // generated code parses
+});
+
 console.log(`\n${n} passed`);
