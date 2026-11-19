@@ -13,6 +13,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -404,22 +405,67 @@ async function extCli(cdp, [sub, q, ...flags]) {
 }
 
 // ---------- relay server ----------
+// The relay holds the one approved connection. If the browser closes or restarts it stays up and
+// reconnects: when a new browser instance appears (DevToolsActivePort changes and its port answers),
+// or when a job needs the browser. Every connection shows the browser's Allow prompt, so it tries once
+// per new browser instance and at most once a minute on demand - never in a loop.
 async function relay() {
-  const url = await findEndpoint(), cdp = await CDP.connect(url);
-  if (process.env.CDP_VISIBLE !== '1') await workWindow(cdp).catch(e => console.log('could not prepare the hidden work window: ' + e.message));
-  const token = crypto.randomBytes(24).toString('hex');
+  let cdp = null, url = null, connecting = null, lastTry = 0, failedFor = null;
   const events = []; let seq = 0; const waiters = new Set();
-  cdp.on(m => { events.push({ seq: ++seq, ...m }); if (events.length > 5000) events.shift(); for (const w of waiters) w(); });
+  const push = m => { events.push({ seq: ++seq, ...m }); if (events.length > 5000) events.shift(); for (const w of waiters) w(); };
+  const stamp = () => new Date().toTimeString().slice(0, 8);
+  const portOpen = u => new Promise(res => {
+    const { port } = new URL(u); const s = net.connect(+port, '127.0.0.1');
+    s.once('connect', () => { s.destroy(); res(true); }); s.once('error', () => res(false)); s.setTimeout(1000, () => { s.destroy(); res(false); });
+  });
+  function attach(reason) {
+    if (connecting) return connecting;
+    lastTry = Date.now();
+    connecting = (async () => {
+      const target = await findEndpoint();
+      if (!(await portOpen(target))) throw new Error('the browser is not running (or remote debugging is off)');
+      console.log(`[${stamp()}] connecting to the browser (${reason}): click Allow in the browser`);
+      const c = await Promise.race([CDP.connect(target), new Promise((_, rej) => setTimeout(() => rej(new Error('Allow was not clicked within 90 s')), 90000))]);
+      cdp = c; url = target; failedFor = null;
+      c.on(push);
+      c.onclose = () => {
+        if (cdp !== c) return;
+        cdp = null; console.log(`[${stamp()}] browser connection closed; waiting for the browser to come back`);
+        push({ method: 'Relay.browserDisconnected', params: {} });
+      };
+      console.log(`[${stamp()}] connected`);
+      if (process.env.CDP_VISIBLE !== '1') await workWindow(c).catch(e => console.log('could not prepare the hidden work window: ' + e.message));
+      return c;
+    })().catch(e => { failedFor = url || 'start'; console.log(`[${stamp()}] not connected: ${e.message}`); throw e; })
+      .finally(() => { connecting = null; });
+    return connecting;
+  }
+  // watch for a new browser instance (its DevToolsActivePort file is rewritten on every start)
+  let seen = await findEndpoint().catch(() => null);
+  setInterval(async () => {
+    if (cdp || connecting) return;
+    const now = await findEndpoint().catch(() => null);
+    if (now && now !== seen && await portOpen(now)) { seen = now; attach('browser restarted').catch(() => {}); }
+  }, 2000).unref?.();
+
+  await attach('relay start').catch(() => {});
+  const token = crypto.randomBytes(24).toString('hex');
   const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x');
     if (req.headers.host !== `127.0.0.1:${RELAY_PORT}` || req.headers['x-relay-token'] !== token) return json(res, 403, { ok: false, error: 'forbidden' });
-    if (u.pathname === '/health') return json(res, 200, { ok: true, url });
+    if (u.pathname === '/health') return json(res, 200, { ok: true, url: url || await findEndpoint().catch(() => null), connected: !!cdp });
     if (u.pathname === '/send' && req.method === 'POST') {
       let body = ''; for await (const c of req) body += c;
-      try { const { method, params, sessionId } = JSON.parse(body); json(res, 200, { ok: true, result: await cdp.send(method, params, sessionId) }); }
-      catch (e) { json(res, 200, { ok: false, error: e.message }); }
+      try {
+        if (!cdp) {
+          if (Date.now() - lastTry < 60000 && !connecting) throw new Error('the browser is not connected. Open it (and click Allow) - the relay reconnects by itself.');
+          await attach('a job needs the browser');
+        }
+        const { method, params, sessionId } = JSON.parse(body);
+        json(res, 200, { ok: true, result: await cdp.send(method, params, sessionId) });
+      } catch (e) { json(res, 200, { ok: false, error: e.message }); }
       return;
     }
     if (u.pathname === '/events') {
@@ -439,10 +485,9 @@ async function relay() {
   server.on('error', e => { console.error(`relay could not listen on 127.0.0.1:${RELAY_PORT}: ${e.code === 'EADDRINUSE' ? 'a relay (or something else) is already running there' : e.message}`); process.exit(1); });
   server.listen(RELAY_PORT, '127.0.0.1', () => {
     fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
-    console.log(`relay up on 127.0.0.1:${RELAY_PORT} (token in ${TOKEN_FILE}). Ctrl+C to stop.`);
+    console.log(`relay up on 127.0.0.1:${RELAY_PORT} (token in ${TOKEN_FILE}). It reconnects if the browser restarts. Ctrl+C to stop.`);
   });
   const stop = () => { try { if (fs.readFileSync(TOKEN_FILE, 'utf8') === token) fs.unlinkSync(TOKEN_FILE); } catch {} process.exit(0); };
-  cdp.onclose = () => { console.log('browser connection closed'); stop(); };
   for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, stop);
 }
 

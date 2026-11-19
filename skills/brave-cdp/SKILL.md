@@ -11,6 +11,7 @@ description: Drive the user's own logged-in Brave, Chrome or Edge over the Chrom
 Modern Chromium browsers (Brave, Chrome 144+, Edge) show an **"Allow remote debugging?"** prompt for EVERY new DevTools connection, with no "always allow". Many small probe scripts = many prompts = an annoyed user.
 - Plan the whole browser task first, then run it as ONE job script (`run job.mjs`) with adaptive steps and full logging.
 - For long sessions with many steps, ask the user once if they want the relay (`node cdp.mjs relay`, run in the background). It holds one approved connection and every later command reuses it automatically. Stop it when the work is done.
+- The relay survives browser restarts: when the browser closes it waits, and when a new browser instance starts it reconnects by itself (one Allow click). It retries once per new browser instance and at most once a minute when a job needs the browser, so it never loops on the Allow prompt.
 
 ## Setup (user does this once)
 - Brave: open `brave://inspect/#remote-debugging` and turn remote debugging on. Chrome/Edge: `chrome://inspect/#remote-debugging` / `edge://inspect/#remote-debugging`.
