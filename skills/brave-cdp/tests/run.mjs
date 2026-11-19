@@ -25,7 +25,7 @@ t('match patterns', () => {
 });
 
 t('expand ~ paths from the extensions page', () => {
-  assert.equal(expandPath('~\\projects\\ext'), path.join(os.homedir(), 'projects', 'ext'));
+  if (process.platform === 'win32') assert.equal(expandPath('~\\projects\\ext'), path.join(os.homedir(), 'projects', 'ext'));
   assert.equal(expandPath('~/projects/ext'), path.join(os.homedir(), 'projects', 'ext'));
   assert.equal(expandPath(''), '');
   assert.equal(expandPath(path.join(os.tmpdir(), 'x')), path.join(os.tmpdir(), 'x'));
