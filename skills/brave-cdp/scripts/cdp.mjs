@@ -268,8 +268,9 @@ async function releaseWorkTab(cdp, targetId, windowId) {
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
   try { await cdp.send('Page.navigate', { url: WORK }, sessionId); } finally { await cdp.send('Target.detachFromTarget', { sessionId }).catch(() => {}); }
 }
-export async function page(cdp, { url = 'about:blank', match, background = false, visible = process.env.CDP_VISIBLE === '1' } = {}) {
-  let target = match && (await tabs(cdp)).find(t => t.url.includes(match));
+export async function page(cdp, { url = 'about:blank', match, targetId, background = false, visible = process.env.CDP_VISIBLE === '1' } = {}) {
+  let target = targetId ? (await tabs(cdp)).find(t => t.targetId === targetId) : match && (await tabs(cdp)).find(t => t.url.includes(match));
+  if (targetId && !target) throw new Error('no open tab with id ' + targetId);
   let created = false, hidden = false, windowId;
   if (!target) {
     hidden = !visible;

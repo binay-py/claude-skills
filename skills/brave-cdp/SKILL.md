@@ -26,6 +26,16 @@ node cdp.mjs cleanup                           # close tabs left by jobs that we
 node cdp.mjs relay                             # optional: keep one connection open
 ```
 
+## MCP server (browser tools without job scripts)
+`scripts/mcp.mjs` is a zero-dependency MCP server with 14 tools: `browser_open`, `browser_tabs`, `browser_navigate`, `browser_read`, `browser_click`, `browser_type`, `browser_key`, `browser_scroll`, `browser_wait`, `browser_screenshot`, `browser_eval`, `browser_show`, `browser_close`, `browser_extension`.
+```
+claude mcp add --scope user -e CDP_BROWSER=brave brave-cdp -- node /path/to/skills/brave-cdp/scripts/mcp.mjs
+```
+- It connects to the browser on the first tool call, not at start-up, and reuses a running relay, so it's one Allow per browser session.
+- `browser_read` returns the page text plus numbered elements (`[12] button "Save"`); click and type take that number as `ref`. That costs a few hundred tokens where a screenshot costs well over a thousand, so screenshots are for layout questions only.
+- Tabs open hidden (background mode below). `tab` takes any id from `browser_tabs`, including the user's own tabs; those are only detached, never closed.
+- For long multi-step tasks a job script (`run job.mjs`) is still cheaper: one tool call instead of one per step.
+
 ## Background mode (default)
 New tabs from `page({ url })` open **hidden**: in a browser window parked off-screen, without taking the user's focus, with focus emulated so sites behave as if watched (animations run, videos play, clicks and screenshots work). The user keeps using the browser and other apps while a job runs. It costs no extra tokens.
 - The relay creates this "work window" once at start-up, right after the user clicks Allow. On Windows, creating a window or a tab brings it to the front, so hidden tabs are pooled: a job reuses an idle tab in the work window and sends it back to idle when done. Only a second hidden page at the same time opens one more tab.
