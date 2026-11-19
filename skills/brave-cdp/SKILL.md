@@ -1,6 +1,6 @@
 ---
 name: brave-cdp
-description: Drive the user's own logged-in Brave, Chrome or Edge over the Chrome DevTools Protocol with a single connection, so the browser's "Allow remote debugging?" prompt appears once instead of on every step. Use for browser tasks that need the user's real sessions (dashboards, uploads, downloads, sites that block scripted HTTP) when no browser MCP is available or wanted.
+description: Drive the user's own logged-in Brave, Chrome or Edge over the Chrome DevTools Protocol with a single connection, so the browser's "Allow remote debugging?" prompt appears once instead of on every step. Use for browser tasks that need the user's real sessions (dashboards, uploads, downloads, sites that block scripted HTTP) when no browser MCP is available or wanted. Also for developing Chrome extensions: reload an unpacked extension after edits, read its errors, or auto-reload on every save.
 ---
 
 # brave-cdp
@@ -26,9 +26,22 @@ node cdp.mjs cleanup                           # close tabs left by jobs that we
 node cdp.mjs relay                             # optional: keep one connection open
 ```
 
+## Extensions you are developing
+Uses the browser's own extensions page, so no extra flags or setup. `<ext>` is the extension's id, its folder, or part of its name (an ambiguous name stops and lists the ids).
+```
+node cdp.mjs ext list                      # every extension: id, on/off, unpacked/store, folder, error count
+node cdp.mjs ext reload <ext> [--tabs]     # reload and print only errors raised since the reload
+node cdp.mjs ext errors <ext> [--clear]    # what the extensions page's Errors button shows
+node cdp.mjs ext watch <ext> [--tabs]      # reload on every save in the folder (Ctrl+C stops)
+```
+- After editing an unpacked extension, run `ext reload <folder> --tabs` instead of asking the user to click reload. `--tabs` also reloads the open pages its content scripts match, because Chrome doesn't re-inject content scripts into tabs that were already open.
+- Exit code 2 means the reload produced errors or the manifest didn't load; the message shows the file and line.
+- The extension must have been loaded once with "Load unpacked". Chrome has no way to do that first load over DevTools without restarting the browser with special flags.
+- In jobs: `const x = await ext(); const r = await x.reload(dir, { reloadTabs: true }); await x.close();`. `x.list()`, `x.find(q)`, `x.info(id)` and `x.clearErrors(id)` are there too.
+
 ## Writing a job
 ```js
-export default async function ({ page, tabs, waitEvent, downloadsTo, cdp, log, args }) {
+export default async function ({ page, tabs, ext, waitEvent, downloadsTo, cdp, log, args }) {
   const p = await page({ url: 'https://example.com' });  // NEW tab (default) — never hijack the user's tabs
   // or: await page({ match: 'mail.google.com' })        // reuse an existing tab only when the task needs it
   await p.click('button.save');        // real mouse events at the element centre

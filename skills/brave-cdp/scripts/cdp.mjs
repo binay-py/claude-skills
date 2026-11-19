@@ -16,6 +16,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { extensions, printReload, formatErrors, watch } from './ext.mjs';
 
 const RELAY_PORT = Number(process.env.CDP_RELAY_PORT || 9333);
 // one token file per relay port, so a second relay (or a test one) never overwrites a running relay's token
@@ -179,11 +180,11 @@ const KEYS = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowDown: 40, Arrow
 
 // Attach to a tab. Default: open a NEW tab so the user's own tabs are never disturbed.
 // { match: 'part-of-url' } reuses an existing tab instead.
-export async function page(cdp, { url = 'about:blank', match } = {}) {
+export async function page(cdp, { url = 'about:blank', match, background = false } = {}) {
   let target = match && (await tabs(cdp)).find(t => t.url.includes(match));
   let created = false;
   if (!target) {
-    target = { targetId: (await cdp.send('Target.createTarget', { url })).targetId }; created = true;
+    target = { targetId: (await cdp.send('Target.createTarget', { url, background })).targetId }; created = true;
     writeLedger([...readLedger(), { targetId: target.targetId, pid: process.pid }]);
   }
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
@@ -258,6 +259,38 @@ export async function downloadsTo(cdp, dir) {
   await cdp.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: path.resolve(dir), eventsEnabled: true });
 }
 
+// ---------- extensions ----------
+async function extCli(cdp, [sub, q, ...flags]) {
+  const has = f => flags.includes(f);
+  if (!['list', 'reload', 'errors', 'watch'].includes(sub) || (sub !== 'list' && !q)) { console.log(USAGE); process.exitCode = 1; return; }
+  const api = await extensions(cdp, o => page(cdp, o));
+  try {
+    if (sub === 'list') {
+      for (const e of await api.list()) {
+        const n = (e.runtimeErrors?.length || 0) + (e.manifestErrors?.length || 0);
+        const kind = e.location === 'UNPACKED' ? 'unpacked' : e.location.toLowerCase().replace('from_', '');
+        console.log(`${e.id}  ${e.state === 'ENABLED' ? 'on ' : 'off'}  ${kind.padEnd(8)}  ${e.name} ${e.version}${n ? `  [${n} error${n > 1 ? 's' : ''}]` : ''}${e.dir ? `
+    ${e.dir}` : ''}`);
+      }
+    }
+    if (sub === 'errors') {
+      const e = await api.find(q), info = await api.info(e.id);
+      console.log(formatErrors(info) || `no errors for ${e.name}`);
+      if (has('--clear')) { await api.clearErrors(e.id); console.log('cleared'); }
+    }
+    if (sub === 'reload') {
+      const r = await api.reload(q, { reloadTabs: has('--tabs') });
+      printReload(r);
+      if (!r.ok) process.exitCode = 2;
+    }
+    if (sub === 'watch') {
+      const ac = new AbortController();
+      for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(s, () => ac.abort());
+      await watch(api, q, { reloadTabs: has('--tabs'), signal: ac.signal });
+    }
+  } finally { await api.close().catch(() => {}); }
+}
+
 // ---------- relay server ----------
 async function relay() {
   const url = await findEndpoint(), cdp = await CDP.connect(url);
@@ -301,11 +334,16 @@ async function relay() {
 }
 
 // ---------- CLI ----------
+const USAGE = `usage: node cdp.mjs tabs | eval "<js>" [--match <url-part>] | run job.mjs [args...] | cleanup | relay
+       node cdp.mjs ext list
+       node cdp.mjs ext reload <id | folder | name> [--tabs]   reload and print new errors (--tabs: also reload the pages its content scripts run on)
+       node cdp.mjs ext errors <id | folder | name> [--clear]
+       node cdp.mjs ext watch  <id | folder | name> [--tabs]   reload on every file change in the folder`;
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   if (cmd === 'relay') return relay();
-  if (!['tabs', 'eval', 'run', 'cleanup'].includes(cmd)) {
-    console.log('usage: node cdp.mjs tabs | eval "<js>" [--match <url-part>] | run job.mjs [args...] | cleanup | relay'); process.exit(1);
+  if (!['tabs', 'eval', 'run', 'cleanup', 'ext'].includes(cmd)) {
+    console.log(USAGE); process.exit(1);
   }
   const cdp = await connect();
   try {
@@ -319,6 +357,7 @@ async function main() {
       try { console.log(JSON.stringify(await p.eval(rest[0]), null, 2)); }
       finally { await p.close(); } // closes the blank tab, or detaches from the matched one; also when the expression throws
     }
+    if (cmd === 'ext') await extCli(cdp, rest);
     if (cmd === 'run') {
       const job = await import(pathToFileURL(path.resolve(rest[0])).href);
       const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a);
@@ -328,7 +367,7 @@ async function main() {
       const onSignal = async () => { for (const pg of opened) await pg.close().catch(() => {}); cdp.close(); process.exit(130); };
       for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(s, onSignal);
       try {
-        await job.default({ cdp, page: openPage, tabs: () => tabs(cdp), waitEvent: (m, o) => waitEvent(cdp, m, o), downloadsTo: d => downloadsTo(cdp, d), log, args: rest.slice(1) });
+        await job.default({ cdp, page: openPage, ext: () => extensions(cdp, openPage), tabs: () => tabs(cdp), waitEvent: (m, o) => waitEvent(cdp, m, o), downloadsTo: d => downloadsTo(cdp, d), log, args: rest.slice(1) });
       } finally {
         for (const pg of opened) await pg.close().catch(() => {});
       }
