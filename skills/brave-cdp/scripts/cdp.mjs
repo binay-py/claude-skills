@@ -263,8 +263,11 @@ async function openInWorkWindow(cdp) {
   const p = await newPopup(cdp, opener?.targetId);
   return { targetId: p.targetId, windowId: p.windowId };
 }
-// Send a pooled popup back to idle. Keeps at most two idle; extra ones are closed.
+// Done with a hidden popup: close it, so nothing is left behind after a job. CDP_KEEP_WINDOW=1 keeps up to
+// two idle popups for reuse instead (faster, and avoids the one-time focus steal of creating a window).
+const KEEP = process.env.CDP_KEEP_WINDOW === '1';
 async function releaseWorkTab(cdp, targetId) {
+  if (!KEEP) return cdp.send('Target.closeTarget', { targetId });
   const idle = (await cdp.send('Target.getTargets')).targetInfos.filter(t => t.type === 'page' && isWork(t.url) && t.targetId !== targetId);
   if (idle.length >= 2) return cdp.send('Target.closeTarget', { targetId });
   await setIdle(cdp, targetId);
@@ -434,7 +437,7 @@ async function relay() {
         push({ method: 'Relay.browserDisconnected', params: {} });
       };
       console.log(`[${stamp()}] connected`);
-      if (process.env.CDP_VISIBLE !== '1') await workWindow(c).catch(e => console.log('could not prepare the hidden work window: ' + e.message));
+      if (KEEP && process.env.CDP_VISIBLE !== '1') await workWindow(c).catch(e => console.log('could not prepare the hidden work window: ' + e.message));
       return c;
     })().catch(e => { failedFor = url || 'start'; console.log(`[${stamp()}] not connected: ${e.message}`); throw e; })
       .finally(() => { connecting = null; });

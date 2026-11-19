@@ -46,8 +46,8 @@ claude mcp add --scope user brave-cdp -e CDP_BROWSER=brave -- node /path/to/skil
 
 ## Background mode (default)
 New tabs from `page({ url })` open **hidden**: in a browser window parked off-screen, without taking the user's focus, with focus emulated so sites behave as if watched (animations run, videos play, clicks and screenshots work). The user keeps using the browser and other apps while a job runs. It costs no extra tokens.
-- Each hidden tab is its own off-screen **popup** window. Links from other apps (gh auth, email, chat) always open in the user's normal window, never in a popup. On Windows, creating a window takes focus, so the popups are pooled: the relay makes one at start-up (right after the Allow click) and jobs reuse idle ones. A second hidden page at the same time opens one more popup.
-- Idle popups show in Alt+Tab as "Claude is working here (hidden)". `cleanup --all` closes them.
+- Each hidden tab is its own off-screen **popup** window. Links from other apps (gh auth, email, chat) always open in the user's normal window, never in a popup. Each popup is closed when its page is closed, so nothing is left behind after a job. Creating a window can take focus once on Windows; set `CDP_KEEP_WINDOW=1` to keep up to two idle popups for reuse instead (the relay then makes one at start-up).
+- With `CDP_KEEP_WINDOW=1`, idle popups show in Alt+Tab as "Claude is working here (hidden)". `cleanup --all` closes them.
 - `await p.show()` moves the window on screen, e.g. to hand a login or CAPTCHA to the user. It goes back off-screen when the page closes.
 - `page({ url, visible: true })` (or `CDP_VISIBLE=1`) opens a normal tab in the user's window instead.
 - Sound plays from hidden tabs. Pause or mute media in the job if that matters.
