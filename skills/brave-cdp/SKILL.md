@@ -33,6 +33,7 @@ node cdp.mjs relay                             # optional: keep one connection o
 - Elements are found by id, test-id, name, aria-label or href first, then by visible text, then by position.
 - Passwords, card numbers and one-time codes are never written to the file. The script reads them from `JOB_*` environment variables and its header lists which.
 - File uploads are left as a commented line to fill in.
+- **Safe reruns.** Clicks that change something (Submit, Send, Post, Pay, Delete, Save... and Enter) are wrapped in `once()`. Each one that runs is logged to `<job>.done.json`, and a finished run deletes the log. If a run dies part-way, the next run stops and says which step already went through, instead of submitting twice. Check the site, then `run job.mjs --again` to replay anyway. Wrap any other step in `once('label', () => ...)` by hand.
 
 ## MCP server (browser tools without job scripts)
 `scripts/mcp.mjs` is a zero-dependency MCP server with 14 tools: `browser_open`, `browser_tabs`, `browser_navigate`, `browser_read`, `browser_click`, `browser_type`, `browser_key`, `browser_scroll`, `browser_wait`, `browser_screenshot`, `browser_eval`, `browser_show`, `browser_close`, `browser_extension`.

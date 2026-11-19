@@ -4,11 +4,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-19
+
 ### Added
 - **brave-cdp: the relay reconnects by itself.** It used to exit when the browser closed. Now it waits, reconnects when the browser starts again (one Allow click), and tells jobs that run meanwhile that the browser isn't connected, instead of failing. It never retries in a loop.
-- **brave-cdp: record mode.** `record <url> --out job.mjs`: click through a task in a visible tab and get a job script that replays it. Stable selectors first, text matching as a fallback, and secrets (passwords, cards, one-time codes) are never saved; the script reads them from environment variables.
+- **brave-cdp: record mode.** `record <url> --out job.mjs`: click through a task in a visible tab and get a job script that replays it. Stable selectors first, text matching as a fallback, and secrets (passwords, cards, one-time codes) are never saved; the script reads them from environment variables. Safe reruns: steps that change something (Submit, Send, Pay, Delete, Enter...) are logged as they run, and if a run dies part-way the next one stops instead of submitting twice (`--again` replays anyway).
 - **brave-cdp: MCP server** (`scripts/mcp.mjs`, no dependencies). 14 browser tools for the user's own logged-in browser: open, tabs, navigate, read (text plus numbered elements to click by number), click, type, key, scroll, wait, screenshot (JPEG, max 1280 px), eval, show, close, and extension list/reload/errors. Connects on first use, reuses the relay, and opens tabs hidden.
-- **brave-cdp: background mode, on by default.** Job tabs open in an off-screen work window with emulated focus, so the user can keep working in the browser and other apps while Claude does. The window is made once when the relay starts and its tabs are pooled, because on Windows creating a window or tab steals focus and navigating an existing one doesn't. `p.show()` brings it on screen, `visible: true` or `CDP_VISIBLE=1` opts out, `cleanup --all` closes the window. Hidden windows close when the job ends; `CDP_KEEP_WINDOW=1` keeps idle ones for reuse.
+- **brave-cdp: background mode, on by default.** Job tabs open in an off-screen work window with emulated focus, so the user can keep working in the browser and other apps while Claude does. Each hidden page is its own off-screen popup window, so links from other apps never land in it, and it is closed when the job ends. `CDP_KEEP_WINDOW=1` keeps idle popups for reuse instead (on Windows, creating a window can take focus once). `p.show()` brings a page on screen, `visible: true` or `CDP_VISIBLE=1` opts out, `cleanup --all` closes leftovers.
 - **brave-cdp:** `ext list | reload | errors | watch` for Chrome extensions you are developing. Reload an unpacked extension by id, folder or name and print only the errors raised since the reload; `--tabs` also reloads the open pages its content scripts match; `watch` reloads on every save. Works through the browser's own extensions page, so it needs no launch flags. Jobs get the same through `ext()`. Pages can be opened in the background with `page({ url, background: true })`.
 
 ## [1.4.0] - 2026-11-16
@@ -87,6 +89,8 @@ First tagged release: 23 skills, tested on Windows, macOS and Linux in CI.
 ### Fixed
 - brave-cdp: Enter now submits forms, pages wait until they leave `about:blank`, and tabs a job opened are closed even when the job fails.
 
+[1.5.0]: https://github.com/binay-py/claude-skills/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/binay-py/claude-skills/compare/v1.2.0...v1.4.0
 [1.3.0]: https://github.com/binay-py/claude-skills/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/binay-py/claude-skills/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/binay-py/claude-skills/releases/tag/v1.1.0

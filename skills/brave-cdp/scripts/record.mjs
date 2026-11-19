@@ -90,16 +90,53 @@ export const RECORDER = String.raw`(() => {
   send({ type: 'page', url: location.href, title: document.title });
 })()`;
 
+// Click labels that usually mean "this changes something on the site": the generated job guards them with once().
+const ONE_TIME = /\b(submit|send|post|publish|share|pay|buy|order|checkout|purchase|confirm|place|apply|book|delete|remove|save|sign up|register|subscribe|unsubscribe|transfer|upload|reply|comment)\b/i;
+
+// Runtime for safe reruns, pasted into jobs that have once() steps.
+const GUARD_HEAD = [
+  "import fs from 'node:fs';",
+  "import { fileURLToPath } from 'node:url';",
+  '',
+].join('\n');
+const GUARD_DOC = [
+  '// Safe reruns: steps wrapped in once() change something on the site. Each one that runs is logged to',
+  '// <this file>.done.json, and a finished run deletes that log. If a run dies part-way (browser restart, crash),',
+  '// the next run finds the log and stops instead of doing those steps twice. Check the site, then run with',
+  "// --again (or delete the log). Wrap any other step in once('label', () => ...) to protect it too.",
+  "const DONE = fileURLToPath(import.meta.url) + '.done.json';",
+].join('\n');
+const GUARD_START = [
+  "  const prev = fs.existsSync(DONE) ? JSON.parse(fs.readFileSync(DONE, 'utf8')) : null;",
+  "  if (prev && !args.includes('--again')) {",
+  '    const last = prev.steps[prev.steps.length - 1];',
+  "    log(`stopped: the last run did \"${last.step}\" at ${last.at} and never finished. Check the site, then run with --again (or delete ${DONE}).`);",
+  '    return;',
+  '  }',
+  '  const run = { started: new Date().toISOString(), steps: [] };',
+  '  const once = async (step, fn) => {',
+  '    await fn();',
+  '    run.steps.push({ step, at: new Date().toISOString() });',
+  '    fs.writeFileSync(DONE, JSON.stringify(run, null, 1));',
+  '  };',
+  '',
+].join('\n');
+
 // Turn recorded actions into a job script.
 export function toJob(actions, { startUrl, recordedAt = new Date().toISOString() } = {}) {
   const L = [], env = [];
-  let needText = false, lastWasClick = false;
+  let needText = false, lastWasClick = false, guarded = 0;
+  const once = (label, call) => (guarded++, `  await once(${J(label)}, () => ${call});`);
   const sel = a => a.unique || !a.text ? `p.click(${J(a.selector)})` : (needText = true, `clickText(p, ${J(a.tag)}, ${J(a.text)})`);
   for (const a of actions) {
     if (a.type === 'goto') { L.push(`  await p.goto(${J(a.url)});`); lastWasClick = false; continue; }
     if (a.type === 'navigated') { if (lastWasClick) L.push(`  await p.waitFor(\`document.readyState === 'complete'\`);`); lastWasClick = false; continue; }
     lastWasClick = false;
-    if (a.type === 'click') { L.push(`  await ${sel(a)};${a.text ? ` // ${a.text.replace(/\n/g, ' ').slice(0, 50)}` : ''}`); lastWasClick = true; }
+    if (a.type === 'click') {
+      const label = (a.text || '').replace(/\s+/g, ' ').trim().slice(0, 50);
+      L.push(ONE_TIME.test(label) ? once(label, sel(a)) : `  await ${sel(a)};${label ? ` // ${label}` : ''}`);
+      lastWasClick = true;
+    }
     if (a.type === 'type') {
       let val;
       if (a.secret) {
@@ -112,7 +149,7 @@ export function toJob(actions, { startUrl, recordedAt = new Date().toISOString()
       L.push(`  await p.type(${val});${a.secret ? ' // not recorded: set this environment variable before running' : ''}`);
     }
     if (a.type === 'select') L.push(`  await p.eval(\`(e => { e.value = ${J(J(a.value)).slice(1, -1)}; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector(${J(J(a.selector)).slice(1, -1)}))\`);`);
-    if (a.type === 'key') L.push(`  await p.key(${J(a.key)});`);
+    if (a.type === 'key') L.push(a.key === 'Enter' ? once('Enter', `p.key(${J(a.key)})`) : `  await p.key(${J(a.key)});`);
     if (a.type === 'file') L.push(`  // await p.upload(${J(a.selector)}, ['path/to/file']); // file picked while recording: set the path`);
   }
   const helper = needText ? `
@@ -125,12 +162,13 @@ async function clickText(p, tag, text) {
   await p.mouse(pt.x, pt.y);
 }
 ` : '';
-  return `// Recorded with brave-cdp record on ${recordedAt.slice(0, 16).replace('T', ' ')}. Edit freely.
+  const g = guarded > 0;
+  return `${g ? GUARD_HEAD : ''}// Recorded with brave-cdp record on ${recordedAt.slice(0, 16).replace('T', ' ')}. Edit freely.
 // Run: node cdp.mjs run ${'<this file>'}${env.length ? `\n// Needs: ${env.join(', ')} (secrets typed while recording are not saved)` : ''}
-export default async function ({ page, log }) {
-  const p = await page({ url: ${J(startUrl)} }); // add visible: true to watch it
+${g ? GUARD_DOC + '\n' : ''}export default async function ({ page, log, args = [] }) {
+${g ? GUARD_START : ''}  const p = await page({ url: ${J(startUrl)} }); // add visible: true to watch it
 ${L.join('\n')}
-  log('done:', await p.eval('location.href'));
+${g ? "  fs.rmSync(DONE, { force: true });\n" : ''}  log('done:', await p.eval('location.href'));
 }
 ${helper}`;
 }

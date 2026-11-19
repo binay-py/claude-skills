@@ -58,7 +58,43 @@ t('record: job from actions, secrets never written', () => {
   assert.match(j, /process\.env\.JOB_PASSWORD/);
   assert.match(j, /clickText\(p, "button", "Save"\)/);
   assert.match(j, /readyState === 'complete'/);
-  new Function(j.replace(/^export default /m, 'return ')); // generated code parses
+  assert.match(j, /await once\("Save", \(\) => clickText/, 'Save is guarded');
+  assert.match(j, /await once\("Enter", \(\) => p\.key\("Enter"\)\)/, 'Enter is guarded');
+  assert.match(j, /await p\.click\("#go"\); \/\/ Go/, 'plain click is not guarded');
+  assert.ok(!/import fs/.test(toJob([{ type: 'click', selector: '#a', unique: true, text: 'Next' }], { startUrl: 'https://x.test/' })), 'no guard code when nothing to guard');
 });
+
+// Run a generated job against a fake page: crash after the submit, then rerun.
+const fs = await import('node:fs');
+const { pathToFileURL } = await import('node:url');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-rec-'));
+const jobFile = path.join(tmp, 'job.mjs');
+fs.writeFileSync(jobFile, toJob([
+  { type: 'click', selector: '#name', unique: true, text: 'Next' },
+  { type: 'click', selector: '#send', unique: true, text: 'Submit' },
+  { type: 'click', selector: '#after', unique: true, text: 'Back to list' },
+], { startUrl: 'https://x.test/' }));
+const fakeRun = async (args, crashOn) => {
+  const clicks = [], logs = [];
+  const p = { click: async s => { if (s === crashOn) throw new Error('browser restarted'); clicks.push(s); }, eval: async () => 'https://x.test/done', waitFor: async () => true };
+  const job = await import(pathToFileURL(jobFile).href + '?' + Math.random());
+  let err = null;
+  await job.default({ page: async () => p, log: (...a) => logs.push(a.join(' ')), args }).catch(e => { err = e; });
+  return { clicks, logs: logs.join('\n'), err };
+};
+const doneFile = jobFile + '.done.json';
+const r1 = await fakeRun([], '#after');
+assert.ok(r1.err && r1.clicks.includes('#send'), 'first run submitted then crashed');
+assert.ok(fs.existsSync(doneFile), 'done-log written after submit');
+const r2 = await fakeRun([]);
+assert.deepEqual(r2.clicks, [], 'rerun does nothing');
+assert.match(r2.logs, /stopped: the last run did "Submit"/);
+const r3 = await fakeRun(['--again']);
+assert.deepEqual(r3.clicks, ['#name', '#send', '#after'], '--again replays everything');
+assert.ok(!fs.existsSync(doneFile), 'finished run clears the log');
+const r4 = await fakeRun([]);
+assert.equal(r4.clicks.length, 3, 'normal rerun after a finished run works');
+fs.rmSync(tmp, { recursive: true, force: true });
+n++; console.log('ok record: safe rerun after a crash');
 
 console.log(`\n${n} passed`);
