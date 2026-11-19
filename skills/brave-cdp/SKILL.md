@@ -29,7 +29,7 @@ node cdp.mjs relay                             # optional: keep one connection o
 ## MCP server (browser tools without job scripts)
 `scripts/mcp.mjs` is a zero-dependency MCP server with 14 tools: `browser_open`, `browser_tabs`, `browser_navigate`, `browser_read`, `browser_click`, `browser_type`, `browser_key`, `browser_scroll`, `browser_wait`, `browser_screenshot`, `browser_eval`, `browser_show`, `browser_close`, `browser_extension`.
 ```
-claude mcp add --scope user -e CDP_BROWSER=brave brave-cdp -- node /path/to/skills/brave-cdp/scripts/mcp.mjs
+claude mcp add --scope user brave-cdp -e CDP_BROWSER=brave -- node /path/to/skills/brave-cdp/scripts/mcp.mjs
 ```
 - It connects to the browser on the first tool call, not at start-up, and reuses a running relay, so it's one Allow per browser session.
 - `browser_read` returns the page text plus numbered elements (`[12] button "Save"`); click and type take that number as `ref`. That costs a few hundred tokens where a screenshot costs well over a thousand, so screenshots are for layout questions only.
