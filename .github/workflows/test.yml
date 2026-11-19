@@ -78,6 +78,9 @@ jobs:
       - name: cf-backup (offline, mock API)
         run: node skills/cf-backup/tests/run.mjs
 
+      - name: brave-cdp (offline)
+        run: node skills/brave-cdp/tests/run.mjs
+
       - name: pwa-check (fixtures, headless Chrome)
         run: node skills/pwa-check/tests/run.mjs
 

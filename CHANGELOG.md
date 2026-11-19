@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **brave-cdp:** `ext list | reload | errors | watch` for Chrome extensions you are developing. Reload an unpacked extension by id, folder or name and print only the errors raised since the reload; `--tabs` also reloads the open pages its content scripts match; `watch` reloads on every save. Works through the browser's own extensions page, so it needs no launch flags. Jobs get the same through `ext()`. Pages can be opened in the background with `page({ url, background: true })`.
+
 ## [1.4.0] - 2026-11-16
 
 ### Added
