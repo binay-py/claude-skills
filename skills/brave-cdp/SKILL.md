@@ -26,6 +26,16 @@ node cdp.mjs cleanup                           # close tabs left by jobs that we
 node cdp.mjs relay                             # optional: keep one connection open
 ```
 
+## Background mode (default)
+New tabs from `page({ url })` open **hidden**: in a browser window parked off-screen, without taking the user's focus, with focus emulated so sites behave as if watched (animations run, videos play, clicks and screenshots work). The user keeps using the browser and other apps while a job runs. It costs no extra tokens.
+- The relay creates this "work window" once at start-up, right after the user clicks Allow. On Windows, creating a window or a tab brings it to the front, so hidden tabs are pooled: a job reuses an idle tab in the work window and sends it back to idle when done. Only a second hidden page at the same time opens one more tab.
+- The work window shows in Alt+Tab and the taskbar as "Claude is working here (hidden)". `cleanup --all` closes it.
+- `await p.show()` moves the window on screen, e.g. to hand a login or CAPTCHA to the user. It goes back off-screen when the page closes.
+- `page({ url, visible: true })` (or `CDP_VISIBLE=1`) opens a normal tab in the user's window instead.
+- Sound plays from hidden tabs. Pause or mute media in the job if that matters.
+- Only the active tab of a window renders at full speed, so with two hidden pages at once the first one is throttled. Run them one after another.
+- Brave reports fake `screenX`/`screenY` to pages; check the window position with `Browser.getWindowBounds` instead.
+
 ## Extensions you are developing
 Uses the browser's own extensions page, so no extra flags or setup. `<ext>` is the extension's id, its folder, or part of its name (an ambiguous name stops and lists the ids).
 ```
@@ -63,7 +73,7 @@ export default async function ({ page, tabs, ext, waitEvent, downloadsTo, cdp, l
 
 ## Gotchas
 - Synthetic `el.click()` doesn't open file choosers, menus, or some React handlers. Use `p.click()` (real mouse events) or `p.upload()`.
-- Some pages (e.g. Google Photos) render nothing while their tab is in the background. Call `await p.front()` first.
+- Some pages (e.g. Google Photos) render nothing while their tab is in the background. Hidden tabs already avoid this; for `visible: true` tabs call `await p.front()` first.
 - If `p.click()` times out, the element is probably hidden or zero-size. Take a screenshot and inspect it before retrying.
 - A stale `DevToolsActivePort` file stays behind after the browser closes. A connect error after that usually means the browser isn't running.
 
