@@ -4,18 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-### Added
-- **lean:** a token-lean mode. Invoking it makes Claude read only what it needs, cap command output, skip narration and keep answers short. `scripts/lean_check.py` reports the fixed overhead loaded every session (default model, 1M context, CLAUDE.md, MEMORY.md, MCP servers, skill descriptions, prompt hooks, auto-compact) with a fix for each.
-
 ## [1.4.0] - 2026-11-16
 
 ### Added
+- **lean:** a token-lean mode. Invoking it makes Claude read only what it needs, cap command output, skip narration and keep answers short. `scripts/lean_check.py` reports the fixed overhead loaded every session (default model, 1M context, CLAUDE.md, MEMORY.md, MCP servers, skill descriptions, prompt hooks, auto-compact) with a fix for each.
 - **promo-video**: promo videos of your own site from one command (`quick <url>`). Records the real page frame by frame and renders a 9:16 and a 16:9 cut with a hook from frame 0, chunked captions inside the Reels/TikTok safe zone, music or an optional edge-tts voiceover, two-pass loudness to -14 LUFS, and a `check` command that verifies every rule from ffprobe numbers instead of frames.
 - SECURITY.md (private reporting, what counts as a guard bypass, which skills use the network), CODE_OF_CONDUCT.md and a pull request template.
 
 ### Fixed
 - **package-guard** compared registry URLs by substring, so a host such as `registry.npmjs.org.evil.example` counted as the public npm registry. It now compares exact hostnames.
 - Three regexes that could backtrack catastrophically on crafted input (read-guard, pwa-check), incomplete regex escaping (secret-commit-guard, freelance-proposal, pwa-check) and cmd.exe quoting in mcp-audit, all found by CodeQL.
+- **readme-upgrade:** HTML comments that span several lines are now skipped when checking links (CodeQL js/bad-tag-filter).
 - CI: the lean skill was missing from the plugin manifest. Workflow now has a read-only token and SHA-pinned actions, kept current by Dependabot.
 
 ## [1.3.0] - 2026-11-16
