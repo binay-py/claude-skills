@@ -171,7 +171,7 @@ export async function closeLeftovers(cdp) {
   const open = new Set((await tabs(cdp)).map(t => t.targetId));
   let n = 0;
   for (const e of stale) if (open.has(e.targetId)) {
-    if (e.workWindow) await releaseWorkTab(cdp, e.targetId, e.workWindow).catch(() => {});
+    if (e.workWindow) await releaseWorkTab(cdp, e.targetId).catch(() => {});
     else await cdp.send('Target.closeTarget', { targetId: e.targetId }).catch(() => {});
     n++;
   }
@@ -189,12 +189,8 @@ const KEYS = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowDown: 40, Arrow
 // { visible: true } (or CDP_VISIBLE=1) opens a normal tab in the user's window instead.
 const OFF = -20000, HIDDEN_SIZE = { width: 1280, height: 900 };
 const WORK = 'data:text/html,<title>Claude is working here (hidden)</title><body style=background:%23111>';
-// Hidden tabs live in one off-screen "work window". It is created minimized (so it doesn't take focus),
-// parked off-screen (a minimized window renders at ~2 fps and screenshots slowly), and new tabs are
-// opened from inside it with window.open, which doesn't raise it. Creating (or restoring) a window takes
-// focus on Windows, so the work window is made ONCE - by the relay at start-up, right when the user is
-// clicking Allow in the browser anyway - and kept. It shows in Alt+Tab as "Claude is working here
-// (hidden)". `cleanup --all` closes it.
+// Hidden tabs: see the popup pool below. Popups are created via window.open (minimized temp window first, so
+// nothing flashes), parked off-screen (minimized windows render at ~2 fps and screenshot slowly).
 async function parkOffscreen(cdp, windowId) {
   for (let i = 0; i < 20; i++) {
     await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } }).catch(() => {});
@@ -204,69 +200,72 @@ async function parkOffscreen(cdp, windowId) {
     await sleep(100);
   }
 }
-async function workWindow(cdp) {
-  const pages = (await cdp.send('Target.getTargets')).targetInfos.filter(t => t.type === 'page');
-  let keeper = pages.find(t => t.url === WORK);
-  if (!keeper) { // a work window whose tabs are all busy still counts
-    const ws = readLedger().map(e => e.workWindow).filter(Boolean);
-    for (const t of pages) { const w = await cdp.send('Browser.getWindowForTarget', { targetId: t.targetId }).catch(() => null); if (w && ws.includes(w.windowId)) { keeper = t; break; } }
-  }
-  if (!keeper) {
-    let r;
-    try { r = await cdp.send('Target.createTarget', { url: WORK, newWindow: true, background: true, windowState: 'minimized' }); }
-    catch { r = await cdp.send('Target.createTarget', { url: WORK, newWindow: true, background: true }); }
-    keeper = { targetId: r.targetId };
-  }
-  const { windowId } = await cdp.send('Browser.getWindowForTarget', { targetId: keeper.targetId });
-  const b = (await cdp.send('Browser.getWindowBounds', { windowId }).catch(() => ({}))).bounds;
-  if (!b || b.windowState !== 'normal' || b.left > -10000) await parkOffscreen(cdp, windowId);
-  return { keeperId: keeper.targetId, windowId };
-}
-// On Windows the browser brings a window to the front whenever a tab is CREATED in it, but not when an
-// existing tab navigates. So hidden tabs are pooled: a job claims an idle tab (the work window's own
-// title page), navigates it, and on close sends it back to idle instead of closing it. A new tab is only
-// opened when every pooled tab is busy (e.g. two hidden pages at once).
+// Each hidden tab lives in its own POPUP window parked off-screen. Popups matter: the browser opens links
+// from other apps (gh auth, mail, chat) in the last focused NORMAL window, never in a popup, so the user's
+// links can't land in a hidden window. Creating a window takes focus on Windows, so popups are pooled:
+// a job claims an idle one, navigates it, and sends it back to idle (WORK page) when done.
 const isWork = u => u === WORK;
-async function workTabs(cdp, windowId) {
-  const out = [];
-  for (const t of (await cdp.send('Target.getTargets')).targetInfos.filter(t => t.type === 'page')) {
-    const w = await cdp.send('Browser.getWindowForTarget', { targetId: t.targetId }).catch(() => null);
-    if (w?.windowId === windowId) out.push(t);
+const winOf = async (cdp, targetId) => (await cdp.send('Browser.getWindowForTarget', { targetId })).windowId;
+async function findTarget(cdp, url, tries = 50) {
+  for (let i = 0; i < tries; i++) {
+    const t = (await cdp.send('Target.getTargets')).targetInfos.find(x => x.type === 'page' && x.url === url);
+    if (t) return t; await sleep(100);
   }
-  return out;
+  return null;
 }
-async function openInWorkWindow(cdp) {
-  const { keeperId, windowId } = await workWindow(cdp);
+// open a new off-screen popup from `openerId` (or from a throwaway normal window if none) and make it idle
+async function newPopup(cdp, openerId) {
+  let temp = null;
+  if (!openerId) {
+    let r; try { r = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true, windowState: 'minimized' }); }
+    catch { r = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true }); }
+    temp = openerId = r.targetId;
+  }
   const mark = 'about:blank#brave-cdp-' + crypto.randomBytes(6).toString('hex');
-  const claim = async targetId => {
-    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-    try { await cdp.send('Page.navigate', { url: mark }, sessionId); } finally { await cdp.send('Target.detachFromTarget', { sessionId }).catch(() => {}); }
-    for (let i = 0; i < 30; i++) {
-      const t = (await cdp.send('Target.getTargets')).targetInfos.find(x => x.targetId === targetId);
-      if (t?.url === mark) return true;
-      if (t && !isWork(t.url) && !t.url.startsWith('about:blank')) return false; // another job got it first
-      await sleep(50);
-    }
-    return false;
-  };
-  for (const t of await workTabs(cdp, windowId)) if (isWork(t.url) && await claim(t.targetId)) return { targetId: t.targetId, windowId, pooled: true };
-  // all busy: open one more tab in the work window (may bring it forward once on Windows)
-  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: keeperId, flatten: true });
-  try { await cdp.send('Runtime.evaluate', { expression: `void window.open(${JSON.stringify(mark)}, '_blank')`, userGesture: true }, sessionId); }
+  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: openerId, flatten: true });
+  try { await cdp.send('Runtime.evaluate', { expression: `void window.open(${JSON.stringify(mark)}, '_blank', 'popup,width=${HIDDEN_SIZE.width},height=${HIDDEN_SIZE.height}')`, userGesture: true }, sessionId); }
   finally { await cdp.send('Target.detachFromTarget', { sessionId }).catch(() => {}); }
-  for (let i = 0; i < 50; i++) {
-    const t = (await cdp.send('Target.getTargets')).targetInfos.find(x => x.type === 'page' && x.url === mark);
-    if (t) return { targetId: t.targetId, windowId, pooled: true };
-    await sleep(100);
-  }
-  throw new Error('could not open a tab in the hidden work window');
+  const t = await findTarget(cdp, mark);
+  if (temp) await cdp.send('Target.closeTarget', { targetId: temp }).catch(() => {});
+  if (!t) throw new Error('could not open a hidden popup window');
+  const windowId = await winOf(cdp, t.targetId);
+  await parkOffscreen(cdp, windowId);
+  return { targetId: t.targetId, windowId, mark };
 }
-// Send a pooled tab back to idle. Keeps at most two idle tabs; extra ones are closed.
-async function releaseWorkTab(cdp, targetId, windowId) {
-  const idle = (await workTabs(cdp, windowId)).filter(t => isWork(t.url) && t.targetId !== targetId);
-  if (idle.length >= 2) return cdp.send('Target.closeTarget', { targetId });
+async function workWindow(cdp) { // make sure at least one idle hidden popup exists (the relay calls this at start-up)
+  const idle = (await cdp.send('Target.getTargets')).targetInfos.find(t => t.type === 'page' && isWork(t.url));
+  if (idle) return { keeperId: idle.targetId, windowId: await winOf(cdp, idle.targetId) };
+  const p = await newPopup(cdp);
+  await setIdle(cdp, p.targetId);
+  return { keeperId: p.targetId, windowId: p.windowId };
+}
+async function setIdle(cdp, targetId) {
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
   try { await cdp.send('Page.navigate', { url: WORK }, sessionId); } finally { await cdp.send('Target.detachFromTarget', { sessionId }).catch(() => {}); }
+}
+async function openInWorkWindow(cdp) {
+  const mark = 'about:blank#brave-cdp-' + crypto.randomBytes(6).toString('hex');
+  const all = (await cdp.send('Target.getTargets')).targetInfos.filter(t => t.type === 'page');
+  for (const t of all.filter(t => isWork(t.url))) {
+    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: t.targetId, flatten: true });
+    try { await cdp.send('Page.navigate', { url: mark }, sessionId); } finally { await cdp.send('Target.detachFromTarget', { sessionId }).catch(() => {}); }
+    for (let i = 0; i < 30; i++) {
+      const now = (await cdp.send('Target.getTargets')).targetInfos.find(x => x.targetId === t.targetId);
+      if (now?.url === mark) { const windowId = await winOf(cdp, t.targetId); await parkOffscreen(cdp, windowId); return { targetId: t.targetId, windowId }; }
+      if (now && !isWork(now.url) && !now.url.startsWith('about:blank')) break; // another job claimed it
+      await sleep(50);
+    }
+  }
+  // none idle: open another popup from any hidden one (may take focus once on Windows)
+  const opener = all.find(t => t.url.startsWith('about:blank#brave-cdp-') || isWork(t.url));
+  const p = await newPopup(cdp, opener?.targetId);
+  return { targetId: p.targetId, windowId: p.windowId };
+}
+// Send a pooled popup back to idle. Keeps at most two idle; extra ones are closed.
+async function releaseWorkTab(cdp, targetId) {
+  const idle = (await cdp.send('Target.getTargets')).targetInfos.filter(t => t.type === 'page' && isWork(t.url) && t.targetId !== targetId);
+  if (idle.length >= 2) return cdp.send('Target.closeTarget', { targetId });
+  await setIdle(cdp, targetId);
 }
 export async function page(cdp, { url = 'about:blank', match, targetId, background = false, visible = process.env.CDP_VISIBLE === '1' } = {}) {
   let target = targetId ? (await tabs(cdp)).find(t => t.targetId === targetId) : match && (await tabs(cdp)).find(t => t.url.includes(match));
@@ -354,7 +353,7 @@ export async function page(cdp, { url = 'about:blank', match, targetId, backgrou
         await cdp.send('Target.detachFromTarget', { sessionId }).catch(() => {});
         if (windowId) {
           if (!p.hidden) await parkOffscreen(cdp, windowId).catch(() => {}); // was shown: hide it again
-          await releaseWorkTab(cdp, target.targetId, windowId);
+          await releaseWorkTab(cdp, target.targetId);
         } else await cdp.send('Target.closeTarget', { targetId: target.targetId });
       }
       finally { writeLedger(readLedger().filter(e => e.targetId !== target.targetId)); }
